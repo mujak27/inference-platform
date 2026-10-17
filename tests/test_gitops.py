@@ -58,6 +58,7 @@ class GitOpsTests(unittest.TestCase):
         self.assertEqual(deployment["spec"]["replicas"], 1)
         self.assertEqual(deployment["spec"]["strategy"]["rollingUpdate"], {"maxSurge": 0, "maxUnavailable": 1})
         pod = deployment["spec"]["template"]["spec"]
+        self.assertEqual(pod["runtimeClassName"], "nvidia")
         container = pod["containers"][0]
         for resource in ("requests", "limits"):
             self.assertEqual(container["resources"][resource]["nvidia.com/gpu"], "1")
@@ -65,6 +66,45 @@ class GitOpsTests(unittest.TestCase):
         self.assertEqual(shm["emptyDir"], {"medium": "Memory", "sizeLimit": "2Gi"})
         for probe in ("startupProbe", "readinessProbe"):
             self.assertEqual(container[probe]["httpGet"]["path"], "/health")
+
+    def test_serving_candidate_and_parameters(self):
+        container = self.resource("Deployment")["spec"]["template"]["spec"]["containers"][0]
+        self.assertEqual(container["image"], "vllm/vllm-openai:v0.31.0@sha256:c1c9f6fd5c109ba7f0546a59f5b2f15fb87f64c77782e90a27b648b42a8e67c3")
+        self.assertEqual(container["command"], ["vllm", "serve"])
+        self.assertEqual(self.resource("ConfigMap")["data"], {
+            "MODEL_ID": "Qwen/Qwen3-1.7B",
+            "MODEL_REVISION": "70d244cc86ccca08cf5af4e1e306ecf908b1ad5e",
+            "SERVED_MODEL_NAME": "Qwen/Qwen3-1.7B",
+            "DTYPE": "float16",
+            "TENSOR_PARALLEL_SIZE": "1",
+            "MAX_MODEL_LEN": "4096",
+            "MAX_NUM_SEQS": "4",
+            "GPU_MEMORY_UTILIZATION": "0.80",
+        })
+        for argument in (
+            "$(MODEL_ID)", "--revision=$(MODEL_REVISION)",
+            "--tokenizer-revision=$(MODEL_REVISION)",
+            "--served-model-name=$(SERVED_MODEL_NAME)", "--dtype=$(DTYPE)",
+            "--tensor-parallel-size=$(TENSOR_PARALLEL_SIZE)",
+            "--max-model-len=$(MAX_MODEL_LEN)", "--max-num-seqs=$(MAX_NUM_SEQS)",
+            "--gpu-memory-utilization=$(GPU_MEMORY_UTILIZATION)",
+            "--enable-prefix-caching",
+        ):
+            self.assertIn(argument, container["args"])
+
+    def test_lab_security_and_persistent_cache(self):
+        pod = self.resource("Deployment")["spec"]["template"]["spec"]
+        self.assertFalse(pod["automountServiceAccountToken"])
+        self.assertEqual(pod["securityContext"]["seccompProfile"], {"type": "RuntimeDefault"})
+        container = pod["containers"][0]
+        self.assertFalse(container["securityContext"]["allowPrivilegeEscalation"])
+        self.assertEqual(container["securityContext"]["capabilities"]["drop"], ["ALL"])
+        self.assertIn({"name": "HF_HOME", "value": "/models/huggingface"}, container["env"])
+        self.assertIn({"name": "models", "mountPath": "/models"}, container["volumeMounts"])
+        cache = next(volume for volume in pod["volumes"] if volume["name"] == "models")
+        self.assertEqual(cache["persistentVolumeClaim"]["claimName"], self.resource("PersistentVolumeClaim")["metadata"]["name"])
+        self.assertEqual(self.resource("PersistentVolumeClaim")["spec"]["storageClassName"], "local-path-retain")
+        self.assertEqual(self.resource("PersistentVolumeClaim")["spec"]["resources"]["requests"]["storage"], "20Gi")
 
     def test_service_and_storage_are_private_and_retained(self):
         self.assertEqual(self.resource("Service")["spec"]["type"], "ClusterIP")
