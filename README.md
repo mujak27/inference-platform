@@ -13,6 +13,17 @@ inference yet.**
 4. Run `bash scripts/preflight.sh` **on the Linux GPU host**.
 5. Record actual versions and evidence before selecting the container/Kubernetes stack.
 
+After the runtime installation and pinned image pull have been separately approved,
+run `sudo bash scripts/validate-cuda.sh` on the Linux GPU host. It uses K3s bundled
+containerd, the fixed vLLM image digest, and NVIDIA runtime to check the literal
+CUDA float32 matrix result `[[58,64],[139,154]]`. It downloads no models and pulls
+no images. Success is one schema-1 JSON record with actual PyTorch/CUDA versions;
+missing GPU, incorrect/malformed output, or runner failure is nonzero with stderr
+diagnostics and no success stdout. Python 3 standard library is required on the
+host. `--runner /path/to/executable` is the argv-safe test seam, not shell text;
+fake-runner unit tests do not prove hardware execution. Concurrent runs use the
+same disposable container name and are not supported.
+
 Ubuntu Server is **not required**. Ubuntu Desktop is an installation option, not
 a dependency of the platform. Disk layout, dual boot, usernames, IP addresses,
 and the management computer are operator-specific and are not baked into workloads.
@@ -45,7 +56,7 @@ until real serving works.
 
 ```sh
 python3 -m pip install -r requirements-dev.txt
-bash -n scripts/preflight.sh scripts/validate-manifests.sh
+bash -n scripts/preflight.sh scripts/validate-manifests.sh scripts/validate-cuda.sh
 python3 -m unittest discover -s tests -v
 bash scripts/validate-manifests.sh
 git diff --check
