@@ -99,10 +99,12 @@ Generated YAML/schema files remain ignored under `.local/`.
    for this pod profile. Some distributions need an explicit `runtimeClassName`;
    add the observed runtime class through the overlay if required.
 4. Verify the selected Argo CD release supports the actual Kubernetes version.
-5. Verify a default StorageClass exists, its provisioner is healthy, and at least
-   20 GiB is available. The PVC intentionally omits `storageClassName` to use
-   that default; select an explicit observed class through Git if needed. A
-   WaitForFirstConsumer PVC may bind only when its GPU pod can be scheduled.
+5. Verify the default local-path provisioner is healthy and at least 20 GiB is
+   available. Issue #5 bootstraps the dedicated **local-path-retain** class using
+   that provisioner; the model PVC explicitly selects it rather than the bundled
+   Delete-policy default class. Follow [retained-storage bootstrap](../bootstrap/storage/README.md)
+   and verify the bound PV's Retain policy. A WaitForFirstConsumer claim needs a
+   schedulable consumer; the storage gate uses a disposable CPU-only pod, not vLLM.
 6. Check CPU/RAM/VRAM/storage headroom, idle GPU memory, model download access,
    and writable model-cache ownership. Record actual versions/evidence.
 

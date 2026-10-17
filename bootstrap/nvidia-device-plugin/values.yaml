@@ -1,0 +1,28 @@
+# Chart 0.20.1; image index verified against nvcr.io before installation.
+image:
+  tag: v0.20.1@sha256:27c1b2553a690ca3d29889dcd61df97525d46f58272c0be8dc63c2b18f120075
+runtimeClassName: nvidia
+migStrategy: none
+failOnInitError: true
+compatWithCPUManager: false
+deviceListStrategy: envvar
+deviceIDStrategy: uuid
+deviceDiscoveryStrategy: nvml
+# This single-node lab has no NFD/GFD labels. Do not install either discovery service.
+affinity: null
+nodeSelector:
+  kubernetes.io/arch: amd64
+  kubernetes.io/os: linux
+devicePlugin:
+  enabled: true
+gfd:
+  enabled: false
+nfd:
+  enabled: false
+resources:
+  requests:
+    cpu: 50m
+    memory: 64Mi
+  limits:
+    cpu: 500m
+    memory: 256Mi
