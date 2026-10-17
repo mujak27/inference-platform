@@ -10,7 +10,9 @@ Owner explicitly approved plugin installation and disposable GPU checks; storage
 firewall/runtime changes, service interruption, and reboot were not authorized.
 Source: fresh `origin/main` base `c4ef0f9`, task branch `gpu-storage-issue-5`;
 configuration is `bootstrap/nvidia-device-plugin/values.yaml` and its accompanying
-runbook. Publication/configuration commit remains pending a reviewed PR.
+runbook. Configuration/evidence snapshot committed after approved execution at
+`f1da27dca926080274c03d280c24abe0b53efc2b`; this records the executed configuration,
+not a GitOps-managed installation. PR review/merge remains pending.
 
 - Installed chart/app **0.20.1**, chart SHA-256
   `b705142f03ac17906bfcface9319e2f7b9a570d2af7f04f23252723ce2c0bb8e`.
@@ -73,7 +75,7 @@ and pod-replacement checks. Executed **2026-10-18 01:32:34–01:32:56 WIB /
 2026-10-17 18:32:34–18:32:56 UTC** (individual operation timestamps in evidence).
 Configuration: `bootstrap/storage/local-path-retain.yaml`,
 `apps/vllm/base/namespace.yaml`, and `apps/vllm/base/model-cache.yaml`; same task
-branch/base as Stage A, configuration commit/PR still pending.
+branch/base and configuration snapshot commit as Stage A; PR review/merge pending.
 
 - Existing healthy **rancher/local-path-provisioner v0.0.37** reused; no second
   provisioner. Dedicated nondefault **local-path-retain** has **Retain** and
@@ -139,8 +141,8 @@ Read-only checks confirmed the boot ID unchanged, node/plugin healthy and PVC
 still Bound. The shutdown block belongs to the GNOME user session; its session
 manager inhibitor reports **"A foreground process is running"** (logout flag 1,
 empty application ID). Other power-key/lid inhibitors are not shutdown blockers.
-Owner must finish/save the foreground work and release the desktop inhibitor
-before retrying. Reboot survival is still **unverified**, not failed post-reboot.
+At that checkpoint, owner intervention or explicit inhibitor-bypass approval was
+required before retrying. Reboot survival was **unverified**, not failed post-reboot.
 Private artifacts: `reboot-preflight.txt`, `reboot-command.json`,
 `reboot-inhibitors.txt`, `gnome-inhibitor-paths.txt`, and
 `gnome-inhibitor-details.txt` in the same evidence directory.
@@ -195,7 +197,8 @@ Additional private evidence in the same directory: `reboot-bypass-command.json`,
 `reboot-{runtimeclass,pvc,pv,namespace}.json`, `reboot-pod-{final,logs,delete}.json`,
 `reboot-pods-after.json`, `reboot-plugin-logs.json`, `post-reboot-final.txt`, and
 `post-reboot-direct-port-probes.json`. Hardware allocation, storage replacement
-and reboot gates passed; configuration commit/reviewed publication still pending.
+and reboot gates passed; configuration snapshot is committed above, with PR
+review/merge still pending.
 
 ## Observed host baseline — issue #3
 

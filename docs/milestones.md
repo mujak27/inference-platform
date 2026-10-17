@@ -2,7 +2,7 @@
 
 ## Milestone 0 — supported environment
 
-Status: **host/runtime, asserted CUDA, Kubernetes GPU allocation, persistent storage and reboot verified; issue-#5 configuration review/publication pending**
+Status: **host/runtime, asserted CUDA, Kubernetes GPU allocation, persistent storage and reboot verified; issue-#5 PR review/merge pending**
 
 - Changes: generic host contract; Ubuntu Desktop USB/install guide; private SSH,
   driver/bootstrap guide; read-only host preflight and local tests.
@@ -99,7 +99,8 @@ Status: **host/runtime, asserted CUDA, Kubernetes GPU allocation, persistent sto
   asserted CUDA matrix result; exit 0, pod removed, actual PVC/PV UIDs preserved.
   No model download/serving; advisories remain unpatched. See `docs/versions.md`
   for versions, observations, exposure limitations and private evidence.
-- Next concrete action: configuration commit, reviewed PR and issue-#5 closeout.
+- Configuration/evidence snapshot: `f1da27dca926080274c03d280c24abe0b53efc2b`,
+  committed after approved host execution. Next: PR review/merge and issue-#5 closeout.
   Do not start issue #6/GitOps/model serving automatically. All 20 unit tests and
   schema checks passed: existing suite 74 resources (71 valid, 3 upstream CRDs
   skipped), plus 5 valid storage/plugin resources; no invalid/errors.
