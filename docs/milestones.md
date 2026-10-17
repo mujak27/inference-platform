@@ -2,7 +2,7 @@
 
 ## Milestone 0 — supported environment
 
-Status: **in progress; hardware verification blocked pending Linux installation/access**
+Status: **in progress; host baseline verified, CUDA/runtime and Kubernetes gates pending**
 
 - Changes: generic host contract; Ubuntu Desktop USB/install guide; private SSH,
   driver/bootstrap guide; read-only host preflight and local tests.
@@ -17,18 +17,32 @@ Status: **in progress; hardware verification blocked pending Linux installation/
   `docs/versions.md`. Agent-launched attempts were blocked by macOS raw-device
   permissions; the owner completed the guarded flash script in Terminal.
 - OS selection changed to Ubuntu Desktop 26.04 LTS by owner decision. The media
-  result above is for Ubuntu 24.04 only; 26.04 media and installation remain
-  pending. See `docs/adr/0001-ubuntu-desktop-26-04.md`.
-- Checks not executed: Ubuntu installation, SSH to GPU host, host inventory,
-  container CUDA computation, Kubernetes GPU allocation. The target is not accessible.
+  result above is for Ubuntu 24.04 only; 26.04 media provenance remains unverified,
+  but the installed Ubuntu 26.04.1 host has now been inspected over SSH.
+  See `docs/adr/0001-ubuntu-desktop-26-04.md`.
+- Host-baseline work ([issue #3](https://github.com/mujak27/inference-platform/issues/3),
+  2026-10-17): owner-approved root-only configuration backups, key-only SSH,
+  management-client-only incoming SSH through UFW, and persistent swap disablement
+  with the swap file retained. Independent key logins passed after access changes;
+  SSH syntax/effective-policy and fstab verification passed; post-change host
+  preflight exited 0. Driver 595.99.02 and the desktop were preserved. See
+  `docs/versions.md` for observed inventory, commands, and evidence limitations.
+- Power/addressing: mains auto-suspend timeout 0 and screen locking enabled;
+  fresh SSH succeeded while the graphical session reported approximately 48
+  minutes idle. Wi-Fi DHCP is retained by owner decision because router reservation
+  is unavailable. Address changes require private-record/firewall maintenance.
+- Checks not executed: continuous idle monitoring, reboot persistence, container
+  CUDA computation, Kubernetes GPU allocation/storage, or inference. No runtime
+  packages were installed and no reboot occurred. Passwordless sudo was enabled
+  by the owner, not this agent, and remains a security limitation.
 - Manifest validation: GitOps/bootstrap and vLLM candidate added; see preparation
   status below. This does not verify a host, cluster, or model deployment.
-- Measured results: none.
+- Measured inference/performance results: none. Host inventory is not CUDA acceptance.
 - Known limitations: host preflight covers inventory/driver visibility only;
   desktop processes consume VRAM; dual boot interrupts availability.
-- Next concrete action: owner verifies installation media and completes host
-  installation/private SSH; run preflight on Linux, then select/pin the GPU runtime
-  and cluster and implement the CUDA/container/allocation acceptance checks.
+- Next concrete action: review the host-baseline evidence and repository changes,
+  then obtain separate runtime-installation approval for issue #4. Verify candidate
+  artifacts before installing the runtime and implementing asserted CUDA checks.
 
 ## GitOps and first-serving preparation — in progress, not runtime verified
 
@@ -48,10 +62,11 @@ artifacts are local under `.local/`; rerun commands to reproduce the checks.
 
 Checks not executed: API-server apply, Argo Synced/Healthy, model downloads,
 GPU/container computation, real streaming inference, PVC reuse, reconciliation,
-and rollback. No accessible GPU cluster is available; all runtime results remain pending.
+and rollback. The GPU host is reachable, but no cluster has been installed;
+all runtime results remain pending.
 
-Next concrete action: review/merge GitOps preparation, then finish milestone 0
-hardware gates before any child Application sync. llm-d, sharing, and LMCache are deferred.
+Next concrete action: finish milestone 0 hardware gates before any child Application
+sync; GitOps preparation is already merged. llm-d, sharing, and LMCache are deferred.
 
 ## Runtime milestones — not verified
 
