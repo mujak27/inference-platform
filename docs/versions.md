@@ -1,18 +1,72 @@
 # Version and evidence record
 
-Documentation research date: **2026-10-17**. No GPU host has been accessed. No
-runtime combination is claimed supported end-to-end by this project yet.
+Documentation research and host inspection date: **2026-10-17**. Private SSH
+inventory and approved host-baseline changes have been verified. No runtime
+combination is claimed supported end-to-end by this project yet.
+
+## Observed host baseline — issue #3
+
+- Ubuntu Desktop 26.04.1 LTS, x86_64; kernel 7.0.0-38-generic; cgroup v2.
+- Core i7-13700K; approximately 123 GiB usable RAM; RTX 3090 with 24,576 MiB
+  VRAM. Driver remains 595.99.02; post-change idle GPU use was 224 MiB.
+- Root ext4 filesystem: approximately 427 GiB free. Other disks and firmware
+  were not changed. Existing working Ubuntu NVIDIA driver was preserved.
+- Owner confirmed desktop console recovery and explicitly approved protected
+  backups, key-only SSH, management-client-only incoming SSH, and persistent
+  swap disablement. Owner separately enabled passwordless sudo; `sudo -n true`
+  succeeds. This agent did not grant it. Broad passwordless sudo remains a risk;
+  remove or narrowly scope it after the experiment.
+- Root-only configuration backups were saved before changes. `sshd -t` and
+  connection-specific `sshd -T -C` passed: public-key authentication enabled,
+  password and keyboard-interactive authentication disabled. Fresh independent
+  key-based SSH connections passed after both SSH and firewall changes.
+- UFW is active and enabled at boot, with default deny incoming/allow outgoing
+  and one TCP SSH allow rule for the observed management client's IPv4 address.
+  IPv6 filtering remains enabled. No Kubernetes ports were opened. These are
+  inspected rules and authorized-client checks, not an unauthorized-client probe.
+- Swap is off, its sole fstab entry is commented, no swap units remain loaded,
+  and the existing 8 GiB swap file is retained for reversal. `findmnt --verify`
+  passed without warnings. Ubuntu hibernation is not part of this lab profile.
+  Before changes, login1 reported hibernation unavailable; no hibernate/resume
+  test was performed. Reboot persistence is configured but not reboot-tested.
+- Active desktop settings report mains suspend timeout 0 and screen locking
+  enabled. SSH succeeded while the graphical session reported approximately
+  48 minutes idle; continuous availability was not measured. No power settings
+  were changed and no sleep targets were masked.
+- Wi-Fi DHCP remains unchanged. Router reservation is unavailable; the owner
+  accepts manually updating the private access record when the host IP changes.
+  A management-client IP change also requires a console-reviewed firewall update.
+- `bash scripts/preflight.sh`, streamed over private SSH, exited 0 before and
+  after changes. Raw policy, change, and post-change preflight evidence remains
+  in owner-only local storage outside Git. No identifiers or raw inventory are
+  published here. No packages were installed, cluster created, GPU computation
+  performed, models downloaded, service stopped, or host rebooted. SSH was
+  reloaded; the desktop and driver remained available.
+
+CUDA computation, Kubernetes allocation/storage, inference, recovery, and
+post-reboot checks remain separate acceptance gates. See
+[issue #3](https://github.com/mujak27/inference-platform/issues/3).
+
+Redacted evidence locator: `<workspace-docs>/inference-platform-private/`, where
+`<workspace-docs>` is the owner's shared local workspace documentation directory,
+outside every repository/worktree. Supporting artifacts dated 2026-10-17:
+`approved-ssh-change-2026-10-17.txt`, `approved-firewall-change-2026-10-17.txt`,
+`approved-swap-change-2026-10-17.txt`, `post-change-verification-2026-10-17.txt`,
+and `host-preflight-after-changes-2026-10-17.txt`. The private `host-access.md`
+in that directory records the exact access and backup locations. These files
+are owner-only; do not upload them without reviewing and redacting their contents.
 
 ## Proposed baseline, not installed versions
 
 - Host: Ubuntu Desktop 26.04 LTS, amd64 (Server is an alternative); selected by
   the owner, superseding the original 24.04 proposal. See
   [the decision record](adr/0001-ubuntu-desktop-26-04.md).
-- Ubuntu 26.04 ISO filename/digest/signature, USB creation, installation, and
-  host compatibility checks: pending. The 24.04 media below does not verify 26.04.
-- Driver branch: discover from the actual host before CUDA runtime selection.
+- Ubuntu 26.04 ISO filename/digest/signature and USB creation: unverified. The
+  installed OS was inspected; the 24.04 media below does not verify 26.04 media.
+- Driver: observed above, not a reason to install another branch.
 - Runtime, NVIDIA Container Toolkit, Kubernetes, device-plugin chart, CUDA test
-  image/digest: not selected/deployed.
+  image/digest: approved-plan candidates are recorded in issues #4–#5, not
+  installed or hardware verified. Revalidate artifacts before installation.
 - llm-d/LMCache: deferred until prerequisite milestones pass.
 
 ## Prepared GitOps candidates — not deployed or hardware verified
@@ -49,12 +103,12 @@ See [GitOps bootstrap, validation limits, and sources](gitops.md).
   byte range with the same SHA-256, and successfully ejected the device.
   This verifies installation media, not actual PC boot or the installed host.
 
-## Observations supplied by the owner (not independently verified)
+## Historical owner context
 
-- Target GPU: NVIDIA RTX 3090, 24 GB VRAM; host RAM: 128 GB.
-- Target currently lacks Linux; intended installation coexists with Windows.
-- Management client: Mac; private network access will be established after installation.
-- CPU, disk capacity, network performance, firmware, driver, runtime, and cluster: unknown.
+The reference host was initially described as an RTX 3090/128 GB Windows desktop
+without Linux, managed from a Mac. Linux installation and private SSH have since
+been observed as recorded above; network performance and runtime acceptance
+remain unmeasured. Installation-media provenance is separate from host inventory.
 
 ## Record after installation
 
