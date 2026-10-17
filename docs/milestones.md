@@ -2,7 +2,7 @@
 
 ## Milestone 0 — supported environment
 
-Status: **in progress; host/runtime bootstrap verified, CUDA and Kubernetes allocation/storage gates pending**
+Status: **in progress; host/runtime and asserted CUDA verified, Kubernetes allocation/storage gates pending**
 
 - Changes: generic host contract; Ubuntu Desktop USB/install guide; private SSH,
   driver/bootstrap guide; read-only host preflight and local tests.
@@ -31,8 +31,8 @@ Status: **in progress; host/runtime bootstrap verified, CUDA and Kubernetes allo
   fresh SSH succeeded while the graphical session reported approximately 48
   minutes idle. Wi-Fi DHCP is retained by owner decision because router reservation
   is unavailable. Address changes require private-record/firewall maintenance.
-- Checks not executed: continuous idle monitoring, reboot persistence, container
-  CUDA computation, Kubernetes GPU allocation/storage, or inference. No runtime
+- Checks not executed during issue #3: continuous idle monitoring, reboot persistence,
+  container CUDA computation, Kubernetes GPU allocation/storage, or inference. No runtime
   packages were installed during issue #3 and no reboot occurred. Passwordless sudo was enabled
   by the owner, not this agent, and remains a security limitation.
 - Manifest validation: GitOps/bootstrap and vLLM candidate added; see preparation
@@ -40,22 +40,34 @@ Status: **in progress; host/runtime bootstrap verified, CUDA and Kubernetes allo
 - Measured inference/performance results: none. Host inventory is not CUDA acceptance.
 - Known limitations: host preflight covers inventory/driver visibility only;
   desktop processes consume VRAM; dual boot interrupts availability.
-- Runtime continuation (issue #4, 2026-10-17): approved pinned Toolkit/K3s installed;
+- Runtime continuation (issue #4, 2026-10-17–18): approved pinned Toolkit/K3s installed;
   node and system pods Ready, NVIDIA runtime/RuntimeClass detected. Public CUDA
   validator source `187524a` has three recorded red→green cycles and the full
   20-test suite passes. Mocked tests do not prove hardware execution.
-- Actual pinned CUDA-image pull failed with an HTTPS read timeout after 245.275
-  seconds (remote exit 1; SSH channel separately exited 255). Bounded disk watch
-  retained 245 samples, minimum free 425.880 GiB, no stop-threshold breach.
-  No active pull/watchdog remains. CUDA compute and ordinary-pod DNS/TLS/API were
-  not run; no retry, device plugin, storage test, model or serving deployment.
-  Driver/desktop/private access preserved. See `docs/versions.md` and the external
-  redacted Stage C report; raw evidence stays private. Known runtime advisory
-  risks remain owner-accepted, not fixed.
-- Next concrete action: parent reviews the failed pull/access evidence and agrees
-  a bounded network diagnostic/continuation before retrying the pinned image;
-  independently review repository changes. Do not advance to GPU allocation or
-  serving based on Ready pods or mocked validation tests.
+- Earlier bundled-ctr pulls timed out; the advertised local concurrency flag is
+  ineffective in this fork. Owner-approved bundled `crictl pull` of the same digest
+  passed (exit 0, 1534 seconds, 33,145,036,800-byte growth, minimum sampled free
+  424,923,029,504 bytes). Deadline/disk guards did not fire. CRI omits all-platform
+  metadata traversal but **does not serialize layers**; no runtime/config change.
+- Real `sudo bash scripts/validate-cuda.sh` passed once at **2026-10-18
+  00:04:51–00:04:54 WIB / 2026-10-17 17:04:51–17:04:54 UTC**: asserted CUDA
+  float32 matrix product `[[58,64],[139,154]]`, PyTorch **2.13.0+cu130**, CUDA
+  **13.0**, exit 0, empty stderr. Driver **595.99.02** and desktop preserved.
+- Ordinary pod independently passed DNS, CA/hostname-verified TLS and asserted
+  API HTTP 200 at **00:06:35–00:06:36 WIB / 17:06:35–17:06:36 UTC**, then was
+  deleted. Firewall/listeners rechecked **00:11:21 WIB / 17:11:21 UTC**: wildcard
+  API/kubelet/VXLAN listeners remain firewall-restricted, direct management API/
+  kubelet probes time out, SSH succeeds; no public ingress configured. These are
+  not external-source or UDP reachability tests. Full limits in `docs/versions.md`.
+- No active pull/watchdog or owned CUDA container/network pod remains; image is
+  retained for #5. No device plugin, storage test, model or serving deployment.
+  Raw evidence stays private; redacted results and locators are in `docs/versions.md`.
+  Known runtime advisory risks remain owner-accepted, **not fixed**. Hardware
+  failure paths were not deliberately induced; public-command failure tests use
+  the agreed fake-runner seam.
+- Next concrete action: complete the independent issue-#4 review and approved
+  publication/closure. Issue #5 requires separate authorization; do not infer
+  Kubernetes GPU allocation/storage or serving acceptance from this CUDA gate.
 
 ## GitOps and first-serving preparation — in progress, not runtime verified
 
@@ -73,10 +85,10 @@ upstream CRD objects. An intentionally invalid Application with a numeric
 `spec.source.repoURL` was rejected by the extracted Argo schema. Generated
 artifacts are local under `.local/`; rerun commands to reproduce the checks.
 
-Checks not executed: API-server apply, Argo Synced/Healthy, model downloads,
-GPU/container computation, real streaming inference, PVC reuse, reconciliation,
-and rollback. K3s bootstrap is now observed above, but GPU computation and all
-GitOps/serving runtime results remain pending.
+Checks not executed for GitOps/serving: Application apply, Argo Synced/Healthy,
+model downloads, real streaming inference, PVC reuse, reconciliation and rollback.
+K3s bootstrap and standalone CUDA computation are observed above; Kubernetes GPU
+allocation and all GitOps/serving runtime results remain pending.
 
 Next concrete action: finish milestone 0 hardware gates before any child Application
 sync; GitOps preparation is already merged. llm-d, sharing, and LMCache are deferred.

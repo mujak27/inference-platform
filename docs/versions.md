@@ -1,6 +1,6 @@
 # Version and evidence record
 
-Documentation research and host inspection date: **2026-10-17**. Private SSH
+Documentation research and host inspection dates: **2026-10-17–18**. Private SSH
 inventory and approved host-baseline changes have been verified. No runtime
 combination is claimed supported end-to-end by this project yet.
 
@@ -56,17 +56,17 @@ and `host-preflight-after-changes-2026-10-17.txt`. The private `host-access.md`
 in that directory records the exact access and backup locations. These files
 are owner-only; do not upload them without reviewing and redacting their contents.
 
-## Observed runtime bootstrap — issue #4, not CUDA acceptance
+## Observed runtime and asserted CUDA acceptance — issue #4
 
-Verified on 2026-10-17; final private check **14:04:30 UTC**:
+Observed on **2026-10-18 WIB (UTC+7) / 2026-10-17 UTC**:
 
 - K3s **v1.35.9+k3s1 (58877f27)** enabled/running, bundled containerd
   **2.2.7-k3s1**, runc **1.4.2**. Four NVIDIA Toolkit/libnvidia-container packages
   are **1.20.1-1**. Packaged CDI refresh reports success/0; NVIDIA RuntimeClass
   exists, with runc retained as default. NVIDIA wrapper under the actual daemon
-  PATH resolves bundled runc; a direct CUDA shim has **not** been exercised.
+  PATH resolves bundled runc; the direct CUDA invocation below passed.
 - Node Ready; CoreDNS/local-path/metrics pods Running/Ready; authenticated
-  `/readyz` succeeds. Ordinary disposable-pod DNS/TLS/API test remains unrun.
+  `/readyz` succeeds. Ordinary disposable-pod DNS/TLS/API test passed below.
 - Prior Stage B verified the CA/client-certificate SSH tunnel and blocked direct
   management API/kubelet connections. Necessary private pod networking was added;
   no public ingress. Generated Kubernetes/Flannel ACCEPT chains precede UFW, so
@@ -76,29 +76,66 @@ Verified on 2026-10-17; final private check **14:04:30 UTC**:
 - Public command `sudo bash scripts/validate-cuda.sh` is implemented at source
   commit `187524a8debae25346a2a97a51ed9d5a31c5a201`. Five fake-runner contract tests
   pass; three red→green cycles and the full **20-test** suite are recorded. They
-  are not hardware evidence.
-- The approved image pull through bundled ctr, namespace k8s.io, linux/amd64,
-  failed with an HTTPS read timeout: remote **exit 1 after 245.275 seconds**.
-  Its SSH channel separately timed out with exit 255. Existing remote watchdog
-  completed; no retry, CUDA launch, model download or pod apply followed.
-- Intended index and amd64 digests are the pinned values below. Progress resolved
-  those descriptors, but post-failure content reads returned not-found and no
-  complete vLLM image was registered. **Image integrity/availability and actual
-  PyTorch/CUDA versions remain unverified.**
-- Watchdog retained 245 free-space samples, maximum interval **1.180 seconds**;
-  minimum sampled free **425.880 GiB**, cumulative growth **0.729 GiB** from the
-  Stage B baseline. Neither 125-GiB/200-GiB stop nor 1800-second deadline fired.
-  Sampled minima are not guaranteed instantaneous peaks. Final free **425.882 GiB**.
+  are not hardware evidence. Missing-GPU/mismatch and runner failures are covered
+  at the fake-runner seam, not by deliberately failing hardware runs.
+- Earlier bundled-ctr pulls failed with HTTPS timeouts. Source inspection of the
+  exact containerd fork found `ctr images pull --local --max-concurrent-downloads`
+  does not apply its advertised limit; local fetch dispatch uses a nil limiter.
+  CRI local pulls also have unbounded layer concurrency. CRI omits `AllMetadata`
+  and avoids non-target-platform metadata traversal; success does **not** prove
+  serialization or establish the earlier TLS failure's root cause. The index has
+  exactly two platforms (amd64/arm64), so the earlier ~45 sockets are not evidence
+  of ~45 platforms. No containerd config change or restart was needed.
+- Owner-approved acquisition used bundled `sudo /usr/local/bin/crictl pull`
+  with `docker.io/vllm/vllm-openai@sha256:c1c9f6fd5c109ba7f0546a59f5b2f15fb87f64c77782e90a27b648b42a8e67c3`.
+  Pull exited **0 after 1534 seconds** inside the approved 5400-second deadline;
+  growth **33,145,036,800 bytes**, minimum sampled free **424,923,029,504 bytes**.
+  No disk guard fired (200-GiB growth cap, 125-GiB abort, 100-GiB absolute floor).
+  Sampled minima are not guaranteed instantaneous peaks. Image registered in
+  `k8s.io`, CRI-managed and unpacked; retained for issue #5. The index and amd64
+  manifest are the pinned digests below; `sha256:c76d0e2225a4b1cb1e2109ace39639f55e714abd1a7a427acc8b0bbd7f6a83b3`
+  is the amd64 **config/image ID**, not a different manifest.
+- CUDA command ran once, **00:04:51–00:04:54 WIB / 17:04:51–17:04:54 UTC**,
+  using the unmodified script (SHA-256
+  `c2a24d67875bf074f3d92a371b1d2a66c7a57396cbd23b1897117d0b11d3cca7`).
+  `k3s ctr --namespace k8s.io run --rm --platform linux/amd64` used
+  `io.containerd.runc.v2` with `/usr/bin/nvidia-container-runtime`, GPU 0,
+  compute/utility capabilities, systemd cgroups, 2 CPUs and 4 GiB RAM; the script
+  contains the complete argument vector and entrypoint override. No model download.
+  CUDA float32 `2x3 @ 3x2` tensors, synchronization, CPU copy and independent
+  expected-value assertion passed: exit **0**, empty stderr, 3 seconds wall time.
+
+  ```json
+  {"schema":1,"status":"pass","operation":"float32_matmul_2x3_3x2","cuda":true,"result":[[58.0,64.0],[139.0,154.0]],"torch":"2.13.0+cu130","torch_cuda":"13.0"}
+  ```
+
+- Ordinary CPU-only pod ran once at **00:06:35–00:06:36 WIB /
+  17:06:35–17:06:36 UTC**, reusing the same image without a pull. Stdout asserted
+  `{"schema":1,"dns":true,"tls_verified":true,"api_http_status":200}`:
+  `kubernetes.default.svc` resolved, mounted-CA and hostname verification stayed
+  enabled, and HTTP 200 was required. Exit **0**, not merely phase `Succeeded`;
+  pod deleted and verified absent. No device-plugin GPU allocation was tested.
+- Listener/firewall recheck at **00:11:21 WIB / 17:11:21 UTC** used `ss -lntup`,
+  `ufw status verbose`, `iptables-save` and `ip6tables-save`. API TCP 6443,
+  kubelet TCP 10250 and VXLAN UDP 8472 bind wildcard addresses, **not** private-only
+  listeners. IPv4/IPv6 INPUT default DROP; only management SSH and interface-scoped
+  pod-to-private-API/kubelet allows exist in UFW user input rules, with no VXLAN
+  allow. Direct management TCP 6443/10250 probes timed out; TCP 22 connected.
+  Prior authenticated SSH-tunnel API access passed. No public ingress configured;
+  no untrusted-source, external-router, UDP reachability or reboot test performed.
+  Kubernetes ACCEPT chains precede UFW; this is not exclusive pod isolation.
 - Driver remains **595.99.02**, GPU memory **222 MiB**, utilization **0%**;
   desktop/terminal processes retained. Fresh strict SSH/sudo and the existing
-  recovery master remote command succeed. No pull/watchdog or active ingestion
-  remains; no owned test container/pod requires cleanup. No prune or disk change.
+  private access succeed. No active pull/watchdog or owned CUDA container/network
+  pod remains. Earlier failed transient units/artifacts were not reset or pruned.
 
-Private evidence: `<workspace-docs>/inference-platform-private/runtime-issue4-stage-c-*`,
-especially `pull-summary.json`, `pull-watch.jsonl`, `pull-output.txt`, and `final.json`;
-the redacted external report is `inference-platform-runtime-stage-c-2026-10-17.md`.
+Private evidence under `<workspace-docs>/inference-platform-private/`:
+`runtime-issue4-stage-c-*` (earlier failure), `crictl-pull-run2-2026-10-17/`
+and the host-side successful-pull cache, `cuda-validation-2026-10-18/`
+(`validator-run.txt`, `post-run-evidence.md`), `network-pod-gate-2026-10-18/evidence.md`,
+and `runtime-issue4-firewall-recheck-2026-10-18.md`.
 Do not publish raw logs, access identities, tokens or recovery socket paths.
-CUDA, Kubernetes GPU allocation/storage and inference remain separate gates.
+CUDA passed; Kubernetes GPU allocation/storage and inference remain separate gates.
 
 ## Other proposed or unverified baseline items
 
@@ -108,8 +145,8 @@ CUDA, Kubernetes GPU allocation/storage and inference remain separate gates.
 - Ubuntu 26.04 ISO filename/digest/signature and USB creation: unverified. The
   installed OS was inspected; the 24.04 media below does not verify 26.04 media.
 - Driver: observed above, not a reason to install another branch.
-- Runtime/Toolkit/Kubernetes installation is observed above. Device-plugin chart
-  and CUDA image hardware acceptance remain pending in issues #4–#5.
+- Runtime/Toolkit/Kubernetes installation and CUDA image acceptance are observed
+  above. Device-plugin allocation/storage acceptance remains pending in issue #5.
 - llm-d/LMCache: deferred until prerequisite milestones pass.
 
 ## Prepared GitOps candidates — not deployed or hardware verified
@@ -126,8 +163,8 @@ CUDA, Kubernetes GPU allocation/storage and inference remain separate gates.
 - Static tools: kubectl v1.37.1 / Kustomize v5.8.1; kubeconform v0.8.0;
   PyYAML 6.0.3. Kubernetes schema baseline 1.35.0 from schema-repository commit
   `aff1ca44984cbbcfa376c1cb6fdc4bb6aa0381fd`. No cluster version is selected by this.
-- Image/configuration/schema research date: 2026-10-17. Actual driver, PyTorch,
-  package inventory, storage provisioning, and real inference tests remain pending.
+- Image/configuration/schema research date: 2026-10-17. Actual driver, PyTorch and
+  package inventory are recorded above; storage provisioning and inference remain pending.
 
 See [GitOps bootstrap, validation limits, and sources](gitops.md).
 
