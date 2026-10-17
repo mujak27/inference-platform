@@ -2,7 +2,7 @@
 
 ## Milestone 0 — supported environment
 
-Status: **in progress; host baseline verified, CUDA/runtime and Kubernetes gates pending**
+Status: **in progress; host/runtime bootstrap verified, CUDA and Kubernetes allocation/storage gates pending**
 
 - Changes: generic host contract; Ubuntu Desktop USB/install guide; private SSH,
   driver/bootstrap guide; read-only host preflight and local tests.
@@ -33,16 +33,29 @@ Status: **in progress; host baseline verified, CUDA/runtime and Kubernetes gates
   is unavailable. Address changes require private-record/firewall maintenance.
 - Checks not executed: continuous idle monitoring, reboot persistence, container
   CUDA computation, Kubernetes GPU allocation/storage, or inference. No runtime
-  packages were installed and no reboot occurred. Passwordless sudo was enabled
+  packages were installed during issue #3 and no reboot occurred. Passwordless sudo was enabled
   by the owner, not this agent, and remains a security limitation.
 - Manifest validation: GitOps/bootstrap and vLLM candidate added; see preparation
   status below. This does not verify a host, cluster, or model deployment.
 - Measured inference/performance results: none. Host inventory is not CUDA acceptance.
 - Known limitations: host preflight covers inventory/driver visibility only;
   desktop processes consume VRAM; dual boot interrupts availability.
-- Next concrete action: review the host-baseline evidence and repository changes,
-  then obtain separate runtime-installation approval for issue #4. Verify candidate
-  artifacts before installing the runtime and implementing asserted CUDA checks.
+- Runtime continuation (issue #4, 2026-10-17): approved pinned Toolkit/K3s installed;
+  node and system pods Ready, NVIDIA runtime/RuntimeClass detected. Public CUDA
+  validator source `187524a` has three recorded red→green cycles and the full
+  20-test suite passes. Mocked tests do not prove hardware execution.
+- Actual pinned CUDA-image pull failed with an HTTPS read timeout after 245.275
+  seconds (remote exit 1; SSH channel separately exited 255). Bounded disk watch
+  retained 245 samples, minimum free 425.880 GiB, no stop-threshold breach.
+  No active pull/watchdog remains. CUDA compute and ordinary-pod DNS/TLS/API were
+  not run; no retry, device plugin, storage test, model or serving deployment.
+  Driver/desktop/private access preserved. See `docs/versions.md` and the external
+  redacted Stage C report; raw evidence stays private. Known runtime advisory
+  risks remain owner-accepted, not fixed.
+- Next concrete action: parent reviews the failed pull/access evidence and agrees
+  a bounded network diagnostic/continuation before retrying the pinned image;
+  independently review repository changes. Do not advance to GPU allocation or
+  serving based on Ready pods or mocked validation tests.
 
 ## GitOps and first-serving preparation — in progress, not runtime verified
 
@@ -62,8 +75,8 @@ artifacts are local under `.local/`; rerun commands to reproduce the checks.
 
 Checks not executed: API-server apply, Argo Synced/Healthy, model downloads,
 GPU/container computation, real streaming inference, PVC reuse, reconciliation,
-and rollback. The GPU host is reachable, but no cluster has been installed;
-all runtime results remain pending.
+and rollback. K3s bootstrap is now observed above, but GPU computation and all
+GitOps/serving runtime results remain pending.
 
 Next concrete action: finish milestone 0 hardware gates before any child Application
 sync; GitOps preparation is already merged. llm-d, sharing, and LMCache are deferred.

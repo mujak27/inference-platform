@@ -56,7 +56,51 @@ and `host-preflight-after-changes-2026-10-17.txt`. The private `host-access.md`
 in that directory records the exact access and backup locations. These files
 are owner-only; do not upload them without reviewing and redacting their contents.
 
-## Proposed baseline, not installed versions
+## Observed runtime bootstrap — issue #4, not CUDA acceptance
+
+Verified on 2026-10-17; final private check **14:04:30 UTC**:
+
+- K3s **v1.35.9+k3s1 (58877f27)** enabled/running, bundled containerd
+  **2.2.7-k3s1**, runc **1.4.2**. Four NVIDIA Toolkit/libnvidia-container packages
+  are **1.20.1-1**. Packaged CDI refresh reports success/0; NVIDIA RuntimeClass
+  exists, with runc retained as default. NVIDIA wrapper under the actual daemon
+  PATH resolves bundled runc; a direct CUDA shim has **not** been exercised.
+- Node Ready; CoreDNS/local-path/metrics pods Running/Ready; authenticated
+  `/readyz` succeeds. Ordinary disposable-pod DNS/TLS/API test remains unrun.
+- Prior Stage B verified the CA/client-certificate SSH tunnel and blocked direct
+  management API/kubelet connections. Necessary private pod networking was added;
+  no public ingress. Generated Kubernetes/Flannel ACCEPT chains precede UFW, so
+  narrow UFW rules do not constitute exclusive effective pod filtering.
+- Owner accepted identified containerd/runc advisory risks, **not** evidence of
+  patches. Additional optional hardening is deferred until working inference.
+- Public command `sudo bash scripts/validate-cuda.sh` is implemented at source
+  commit `187524a8debae25346a2a97a51ed9d5a31c5a201`. Five fake-runner contract tests
+  pass; three red→green cycles and the full **20-test** suite are recorded. They
+  are not hardware evidence.
+- The approved image pull through bundled ctr, namespace k8s.io, linux/amd64,
+  failed with an HTTPS read timeout: remote **exit 1 after 245.275 seconds**.
+  Its SSH channel separately timed out with exit 255. Existing remote watchdog
+  completed; no retry, CUDA launch, model download or pod apply followed.
+- Intended index and amd64 digests are the pinned values below. Progress resolved
+  those descriptors, but post-failure content reads returned not-found and no
+  complete vLLM image was registered. **Image integrity/availability and actual
+  PyTorch/CUDA versions remain unverified.**
+- Watchdog retained 245 free-space samples, maximum interval **1.180 seconds**;
+  minimum sampled free **425.880 GiB**, cumulative growth **0.729 GiB** from the
+  Stage B baseline. Neither 125-GiB/200-GiB stop nor 1800-second deadline fired.
+  Sampled minima are not guaranteed instantaneous peaks. Final free **425.882 GiB**.
+- Driver remains **595.99.02**, GPU memory **222 MiB**, utilization **0%**;
+  desktop/terminal processes retained. Fresh strict SSH/sudo and the existing
+  recovery master remote command succeed. No pull/watchdog or active ingestion
+  remains; no owned test container/pod requires cleanup. No prune or disk change.
+
+Private evidence: `<workspace-docs>/inference-platform-private/runtime-issue4-stage-c-*`,
+especially `pull-summary.json`, `pull-watch.jsonl`, `pull-output.txt`, and `final.json`;
+the redacted external report is `inference-platform-runtime-stage-c-2026-10-17.md`.
+Do not publish raw logs, access identities, tokens or recovery socket paths.
+CUDA, Kubernetes GPU allocation/storage and inference remain separate gates.
+
+## Other proposed or unverified baseline items
 
 - Host: Ubuntu Desktop 26.04 LTS, amd64 (Server is an alternative); selected by
   the owner, superseding the original 24.04 proposal. See
@@ -64,9 +108,8 @@ are owner-only; do not upload them without reviewing and redacting their content
 - Ubuntu 26.04 ISO filename/digest/signature and USB creation: unverified. The
   installed OS was inspected; the 24.04 media below does not verify 26.04 media.
 - Driver: observed above, not a reason to install another branch.
-- Runtime, NVIDIA Container Toolkit, Kubernetes, device-plugin chart, CUDA test
-  image/digest: approved-plan candidates are recorded in issues #4–#5, not
-  installed or hardware verified. Revalidate artifacts before installation.
+- Runtime/Toolkit/Kubernetes installation is observed above. Device-plugin chart
+  and CUDA image hardware acceptance remain pending in issues #4–#5.
 - llm-d/LMCache: deferred until prerequisite milestones pass.
 
 ## Prepared GitOps candidates — not deployed or hardware verified
