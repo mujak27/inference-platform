@@ -1,0 +1,93 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vllm
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: vllm
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 0
+      maxUnavailable: 1
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: vllm
+    spec:
+      automountServiceAccountToken: false
+      nodeSelector:
+        kubernetes.io/arch: amd64
+        kubernetes.io/os: linux
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: vllm
+          # v0.31.0 manifest-list digest; runtime compatibility is still unverified.
+          image: vllm/vllm-openai:v0.31.0@sha256:c1c9f6fd5c109ba7f0546a59f5b2f15fb87f64c77782e90a27b648b42a8e67c3
+          command: [vllm, serve]
+          args:
+            - $(MODEL_ID)
+            - --revision=$(MODEL_REVISION)
+            - --tokenizer-revision=$(MODEL_REVISION)
+            - --served-model-name=$(SERVED_MODEL_NAME)
+            - --dtype=$(DTYPE)
+            - --tensor-parallel-size=$(TENSOR_PARALLEL_SIZE)
+            - --max-model-len=$(MAX_MODEL_LEN)
+            - --max-num-seqs=$(MAX_NUM_SEQS)
+            - --gpu-memory-utilization=$(GPU_MEMORY_UTILIZATION)
+            - --enable-prefix-caching
+            - --host=0.0.0.0
+            - --port=8000
+          envFrom:
+            - configMapRef:
+                name: vllm-config
+          env:
+            - name: HF_HOME
+              value: /models/huggingface
+          ports:
+            - name: http
+              containerPort: 8000
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: [ALL]
+          resources:
+            requests:
+              cpu: "2"
+              memory: 8Gi
+              ephemeral-storage: 8Gi
+              nvidia.com/gpu: "1"
+            limits:
+              cpu: "4"
+              memory: 16Gi
+              ephemeral-storage: 20Gi
+              nvidia.com/gpu: "1"
+          startupProbe:
+            httpGet:
+              path: /health
+              port: http
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 180
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            periodSeconds: 10
+            timeoutSeconds: 5
+          volumeMounts:
+            - name: models
+              mountPath: /models
+            - name: shm
+              mountPath: /dev/shm
+      volumes:
+        - name: models
+          persistentVolumeClaim:
+            claimName: vllm-models
+        - name: shm
+          emptyDir:
+            medium: Memory
+            sizeLimit: 2Gi

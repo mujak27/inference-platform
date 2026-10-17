@@ -33,13 +33,26 @@ capacity and compatibility validation.
 See [milestones](docs/milestones.md) and the [version/evidence record](docs/versions.md).
 No model weights, credentials, installation images, or raw host inventories belong in Git.
 
+## GitOps preparation
+
+[GitOps guide](docs/gitops.md): `bootstrap/`, `infra/`, and `apps/` follow the
+[k8s-crossplane layout](https://github.com/mujak27/k8s-crossplane). A pinned Argo CD
+bootstrap and single-replica vLLM candidate can be rendered now. Both Applications
+require manual sync; no cluster/GPU validation is claimed. llm-d and LMCache wait
+until real serving works.
+
 ## Local checks
 
 ```sh
-bash -n scripts/preflight.sh
+python3 -m pip install -r requirements-dev.txt
+bash -n scripts/preflight.sh scripts/validate-manifests.sh
 python3 -m unittest discover -s tests -v
+bash scripts/validate-manifests.sh
 git diff --check
 ```
+
+Manifest checks need kubectl and kubeconform; versions and schema limitations
+are documented in the GitOps guide. No configured cluster is contacted.
 
 Host installation is manual and intentionally does not automate partitioning,
 flashing, reboots, or firewall changes. Container CUDA computation and Kubernetes

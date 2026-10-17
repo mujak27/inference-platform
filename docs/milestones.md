@@ -21,7 +21,8 @@ Status: **in progress; hardware verification blocked pending Linux installation/
   pending. See `docs/adr/0001-ubuntu-desktop-26-04.md`.
 - Checks not executed: Ubuntu installation, SSH to GPU host, host inventory,
   container CUDA computation, Kubernetes GPU allocation. The target is not accessible.
-- Manifest validation: not applicable; no deployment manifests added yet.
+- Manifest validation: GitOps/bootstrap and vLLM candidate added; see preparation
+  status below. This does not verify a host, cluster, or model deployment.
 - Measured results: none.
 - Known limitations: host preflight covers inventory/driver visibility only;
   desktop processes consume VRAM; dual boot interrupts availability.
@@ -29,7 +30,30 @@ Status: **in progress; hardware verification blocked pending Linux installation/
   installation/private SSH; run preflight on Linux, then select/pin the GPU runtime
   and cluster and implement the CUDA/container/allocation acceptance checks.
 
-## Remaining milestones — not started
+## GitOps and first-serving preparation — in progress, not runtime verified
+
+Changes: `bootstrap/`, `infra/`, and `apps/` layout; pinned Argo CD and vLLM/model
+candidates; manual non-cascading Applications; private Service and retained model
+PVC; probes and bounded shared memory; streaming smoke test; CI/static checks.
+See `docs/gitops.md` for gates, commands, rollback, and cleanup.
+
+Static checks passed on the management Mac (2026-10-17):
+`python3 -m unittest discover -s tests -v` (15 tests),
+`bash -n scripts/preflight.sh scripts/validate-manifests.sh`, and
+`bash scripts/validate-manifests.sh` (with kubeconform v0.8.0 on PATH):
+74 rendered resource instances, 71 valid, 0 invalid/errors, 3 explicitly skipped
+upstream CRD objects. An intentionally invalid Application with a numeric
+`spec.source.repoURL` was rejected by the extracted Argo schema. Generated
+artifacts are local under `.local/`; rerun commands to reproduce the checks.
+
+Checks not executed: API-server apply, Argo Synced/Healthy, model downloads,
+GPU/container computation, real streaming inference, PVC reuse, reconciliation,
+and rollback. No accessible GPU cluster is available; all runtime results remain pending.
+
+Next concrete action: review/merge GitOps preparation, then finish milestone 0
+hardware gates before any child Application sync. llm-d, sharing, and LMCache are deferred.
+
+## Runtime milestones — not verified
 
 1. One real vLLM replica: pinned runtime/model, persistent weights, probes,
    bounded shared memory, private Service, real streaming smoke test.

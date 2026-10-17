@@ -136,10 +136,11 @@ driver compatibility, storage, swap policy, and private network path. Select one
 lightweight distribution with a supported GPU runtime setup and pin it. Avoid
 unnecessary Kubernetes-in-Docker nesting and duplicate runtime/device-plugin installs.
 
-The next slice must pin a CUDA compute-test image and dependencies, perform an
+The next hardware slice must pin a CUDA compute-test image and dependencies, perform an
 asserted GPU calculation inside it, then prove Kubernetes GPU allocation. Do not
 treat `nvidia-smi` in a container as satisfying that gate. Only after those checks
-should the first vLLM deployment be added. llm-d and LMCache wait for real serving.
+should the prepared vLLM candidate be deployed. Its manifests can be rendered
+without hardware; see [the GitOps guide](gitops.md). llm-d and LMCache wait for real serving.
 
 ## References checked 2026-10-17
 

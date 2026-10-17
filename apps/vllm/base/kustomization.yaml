@@ -1,0 +1,20 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: inference
+resources:
+  - namespace.yaml
+  - deployment.yaml
+  - service.yaml
+  - model-cache.yaml
+configMapGenerator:
+  - name: vllm-config
+    literals:
+      - MODEL_ID=Qwen/Qwen3-1.7B
+      - MODEL_REVISION=70d244cc86ccca08cf5af4e1e306ecf908b1ad5e
+      - SERVED_MODEL_NAME=Qwen/Qwen3-1.7B
+      - DTYPE=float16
+      - TENSOR_PARALLEL_SIZE=1
+      - MAX_MODEL_LEN=4096
+      - MAX_NUM_SEQS=4
+      # Single-replica budget, not the later shared-GPU budget.
+      - GPU_MEMORY_UTILIZATION=0.80

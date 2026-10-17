@@ -12,8 +12,27 @@ runtime combination is claimed supported end-to-end by this project yet.
   host compatibility checks: pending. The 24.04 media below does not verify 26.04.
 - Driver branch: discover from the actual host before CUDA runtime selection.
 - Runtime, NVIDIA Container Toolkit, Kubernetes, device-plugin chart, CUDA test
-  image/digest, Argo CD, vLLM image/digest, model revision: not selected/deployed.
+  image/digest: not selected/deployed.
 - llm-d/LMCache: deferred until prerequisite milestones pass.
+
+## Prepared GitOps candidates — not deployed or hardware verified
+
+- Argo CD v3.5.5, release commit `a5038b0e2bbac1715754380ae0084df8e3d5b48c`.
+- vLLM v0.31.0, manifest-list digest
+  `sha256:c1c9f6fd5c109ba7f0546a59f5b2f15fb87f64c77782e90a27b648b42a8e67c3`.
+  Inspected amd64 manifest digest:
+  `sha256:a4a4c0437bf7240089da5f08aa370c4aee17ae5290f7a3b468825ee26c4c3a6b`;
+  registry config declares CUDA 13.0.2, root default user, `vllm serve`
+  entrypoint, and build commit `db9527a46873454610df6dbedf79a36d6bf1a7f6`.
+- Qwen/Qwen3-1.7B model/tokenizer revision
+  `70d244cc86ccca08cf5af4e1e306ecf908b1ad5e` from Hugging Face metadata.
+- Static tools: kubectl v1.37.1 / Kustomize v5.8.1; kubeconform v0.8.0;
+  PyYAML 6.0.3. Kubernetes schema baseline 1.35.0 from schema-repository commit
+  `aff1ca44984cbbcfa376c1cb6fdc4bb6aa0381fd`. No cluster version is selected by this.
+- Image/configuration/schema research date: 2026-10-17. Actual driver, PyTorch,
+  package inventory, storage provisioning, and real inference tests remain pending.
+
+See [GitOps bootstrap, validation limits, and sources](gitops.md).
 
 ## Historical media evidence — Ubuntu 24.04, not the selected baseline
 

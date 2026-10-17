@@ -42,8 +42,9 @@ Host and GPU validation → one real vLLM replica → GitOps → two shared-GPU 
 → llm-d routing → standardized observability/benchmarks → LMCache → portfolio demo.
 
 Begin with Qwen/Qwen3-1.7B as a candidate, FP16, tensor parallelism 1, context
-4096, and concurrency 4. These are untested starting settings, not deployable
-desired state yet. Pin the model revision and runtime before deployment.
+4096, and concurrency 4. These untested starting settings are encoded in the
+[prepared GitOps candidate](gitops.md) with pinned model/runtime references;
+host compatibility and actual serving must be validated before adoption.
 
 Automatic prefix caching reuses token-prefix KV state in local GPU memory;
 LMCache can extend KV storage beyond that GPU. Neither is a cache of completed

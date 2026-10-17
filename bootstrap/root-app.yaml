@@ -1,0 +1,17 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: root
+  namespace: argocd
+  # No deletion finalizer: removing root must not cascade to child apps.
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/mujak27/inference-platform.git
+    targetRevision: main
+    path: infra
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: argocd
+  # Manual sync until the host and first serving path have been verified.
+  syncPolicy: {}
