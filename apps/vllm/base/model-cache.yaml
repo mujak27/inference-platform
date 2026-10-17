@@ -7,7 +7,8 @@ metadata:
 spec:
   accessModes:
     - ReadWriteOnce
-  # Uses the cluster default StorageClass; verify provisioner and capacity first.
+  # Provisioned by the existing local-path service; retained independently of Argo.
+  storageClassName: local-path-retain
   resources:
     requests:
       storage: 20Gi

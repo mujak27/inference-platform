@@ -2,7 +2,7 @@
 
 ## Milestone 0 — supported environment
 
-Status: **in progress; host/runtime and asserted CUDA verified, Kubernetes allocation/storage gates pending**
+Status: **host/runtime, asserted CUDA, Kubernetes GPU allocation, persistent storage and reboot verified; issue-#5 PR review/merge pending**
 
 - Changes: generic host contract; Ubuntu Desktop USB/install guide; private SSH,
   driver/bootstrap guide; read-only host preflight and local tests.
@@ -65,9 +65,45 @@ Status: **in progress; host/runtime and asserted CUDA verified, Kubernetes alloc
   Known runtime advisory risks remain owner-accepted, **not fixed**. Hardware
   failure paths were not deliberately induced; public-command failure tests use
   the agreed fake-runner seam.
-- Next concrete action: complete the independent issue-#4 review and approved
-  publication/closure. Issue #5 requires separate authorization; do not infer
-  Kubernetes GPU allocation/storage or serving acceptance from this CUDA gate.
+- Issue #4 was merged/closed in PR #9; issue #5 Stage A separately approved and
+  executed **2026-10-18 01:00–01:09 WIB / 2026-10-17 18:00–18:09 UTC**. One pinned
+  NVIDIA plugin 0.20.1 installed, no sharing/discovery/MPS workloads. Node capacity
+  and allocatable each report one GPU. A real one-GPU Kubernetes pod passed the
+  #4 synchronized CUDA assertion and exited 0; concurrent second full-GPU request
+  was Pending/Unschedulable with `Insufficient nvidia.com/gpu`. Both test pods
+  deleted; plugin/system pods healthy, desktop GPU baseline preserved. Authenticated
+  TLS-verifying SSH-tunnel access used checksummed kubectl 1.35.9. Versions,
+  configuration paths, initial node-status propagation race, and private evidence
+  locators are recorded in `docs/versions.md`.
+- Issue #5 Stage B separately approved and executed **01:32:34–01:32:56 WIB /
+  18:32:34–18:32:56 UTC**. Dedicated nondefault local-path-retain class reuses the
+  bundled provisioner; the default Delete class stays unchanged. Protected
+  inference/vllm-models claim Bound at **20Gi**, actual PV **Retain**, ext4 backing
+  verified. Root-owned cache write/fsync/read-checksum and another write passed
+  across distinct pods (both exit 0, deleted afterward). Real namespace/PVC/PV
+  and probe data preserved. Free **395.52 GiB**; non-quota/non-replicated storage
+  and disk-growth/floor limitations recorded in `docs/versions.md` and storage
+  runbook. No model download, serving or GitOps deployment exists yet.
+- Reboot now/console recovery subsequently approved. At **01:36:01 WIB /
+  18:36:01 UTC**, the normal reboot request exited 1 because GNOME blocked shutdown:
+  **"A foreground process is running"**. No bypass/forced retry; boot ID unchanged,
+  node/plugin healthy and retained PVC Bound. This is a pre-shutdown blocker, not
+  a post-reboot failure. Owner then separately authorized inhibitor bypass.
+- One normal systemd reboot with `--check-inhibitors=no` at **01:37:40 WIB /
+  18:37:40 UTC** changed the boot ID; no hard reset/`--force`. Fresh SSH, active
+  firewall, TLS-verifying private kubectl access, unchanged driver/runtime with
+  default runc, Ready node, exactly one ready plugin, and GPU allocatable 1 all
+  returned. All four system/plugin pods ready after transient startup states.
+  At **01:39:42 WIB / 18:39:42 UTC**, a new one-GPU pod proved the original retained
+  marker, replacement-pod file, cache ownership, new persistent write, and the
+  asserted CUDA matrix result; exit 0, pod removed, actual PVC/PV UIDs preserved.
+  No model download/serving; advisories remain unpatched. See `docs/versions.md`
+  for versions, observations, exposure limitations and private evidence.
+- Configuration/evidence snapshot: `f1da27dca926080274c03d280c24abe0b53efc2b`,
+  committed after approved host execution. Next: PR review/merge and issue-#5 closeout.
+  Do not start issue #6/GitOps/model serving automatically. All 20 unit tests and
+  schema checks passed: existing suite 74 resources (71 valid, 3 upstream CRDs
+  skipped), plus 5 valid storage/plugin resources; no invalid/errors.
 
 ## GitOps and first-serving preparation — in progress, not runtime verified
 
@@ -87,8 +123,9 @@ artifacts are local under `.local/`; rerun commands to reproduce the checks.
 
 Checks not executed for GitOps/serving: Application apply, Argo Synced/Healthy,
 model downloads, real streaming inference, PVC reuse, reconciliation and rollback.
-K3s bootstrap and standalone CUDA computation are observed above; Kubernetes GPU
-allocation and all GitOps/serving runtime results remain pending.
+K3s bootstrap, standalone CUDA computation and Kubernetes GPU allocation are
+observed above; pod-replacement storage and reboot survival are verified, but all
+GitOps/serving runtime results remain pending.
 
 Next concrete action: finish milestone 0 hardware gates before any child Application
 sync; GitOps preparation is already merged. llm-d, sharing, and LMCache are deferred.
