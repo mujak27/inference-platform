@@ -137,6 +137,48 @@ and `runtime-issue4-firewall-recheck-2026-10-18.md`.
 Do not publish raw logs, access identities, tokens or recovery socket paths.
 CUDA passed; Kubernetes GPU allocation/storage and inference remain separate gates.
 
+### Installation provenance — 2026-10-17 Stage A/B
+
+Configuration evidence was captured at repository base `d0c1608`; installation
+was an approved host operation, **not** a Git-managed deployment. The private
+`runtime-issue4-continuation-install.sh` records the exact configuration/program,
+and `runtime-issue4-continuation-install.json` records its execution. Its redacted
+configuration shape: wildcard bind; private node advertise/node IP; localhost and
+127.0.0.1 TLS SANs; pod/service CIDRs `10.42.0.0/16` / `10.43.0.0/16` (route
+overlap checked); kubeconfig mode 0600; only Traefik and ServiceLB disabled.
+SQLite and the default runc runtime were retained; generated containerd config
+was not edited.
+
+- K3s [release](https://github.com/k3s-io/k3s/releases/tag/v1.35.9%2Bk3s1)
+  checksums matched binary SHA-256
+  `897acb21cca57d477a211102251a6591450ce767344a9faaa121a1007ca9fa9a`.
+  Installer source revision `58877f27435fe86ee292859db3d0df2ca5423991`, SHA-256
+  `8598e002e61d658fed7b7542fc6d2c66d8da6eae69e088830105d2ee1ffb6d91`,
+  was staged/rehashed, not piped from the network. After installing the verified
+  binary and reviewed config, root ran the staged installer with
+  `INSTALL_K3S_VERSION=v1.35.9+k3s1 INSTALL_K3S_SKIP_DOWNLOAD=true
+  INSTALL_K3S_SKIP_SELINUX_RPM=true INSTALL_K3S_SKIP_START=true
+  INSTALL_K3S_SKIP_ENABLE=true sh <staged-installer> server`, then separately
+  `systemctl enable --now k3s.service`.
+- Toolkit followed the [NVIDIA production-repository installation guide](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html).
+  The scoped signed source was `https://nvidia.github.io/libnvidia-container/stable/deb/amd64`;
+  primary signing-key fingerprint `C95B321B61E88C1809C4F759DDCAE044F796ECB0`.
+  Authenticated metadata and the exact dependency simulation passed before root
+  executed `apt-get --assume-yes --no-install-recommends --no-remove --no-upgrade
+  install nvidia-container-toolkit=1.20.1-1 nvidia-container-toolkit-base=1.20.1-1
+  libnvidia-container-tools=1.20.1-1 libnvidia-container1=1.20.1-1`, with
+  `DEBIAN_FRONTEND=noninteractive NEEDRESTART_MODE=l`. Only those four packages
+  were installed. Exact command/result: private
+  `runtime-issue4-stage-b-toolkit-install-command-2026-10-17.txt` and
+  `runtime-issue4-stage-b-toolkit-install-2026-10-17.json`; signed-source evidence:
+  `runtime-issue4-stage-a-repository-result-2026-10-17.json`.
+
+Compatibility references: [K3s NVIDIA runtime support](https://docs.k3s.io/advanced#nvidia-container-runtime-support)
+and [CUDA minor-version compatibility](https://docs.nvidia.com/deploy/cuda-compatibility/minor-version-compatibility.html).
+These inform the candidate choice; the observed CUDA assertion above, not the
+documentation, establishes this host's computation result. They do not establish
+security-advisory fixes or Kubernetes GPU allocation compatibility.
+
 ## Other proposed or unverified baseline items
 
 - Host: Ubuntu Desktop 26.04 LTS, amd64 (Server is an alternative); selected by
