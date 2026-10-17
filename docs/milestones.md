@@ -16,6 +16,9 @@ Status: **in progress; hardware verification blocked pending Linux installation/
   on 2026-10-17. All 6,250,332,160 ISO bytes matched the signed SHA-256; see
   `docs/versions.md`. Agent-launched attempts were blocked by macOS raw-device
   permissions; the owner completed the guarded flash script in Terminal.
+- OS selection changed to Ubuntu Desktop 26.04 LTS by owner decision. The media
+  result above is for Ubuntu 24.04 only; 26.04 media and installation remain
+  pending. See `docs/adr/0001-ubuntu-desktop-26-04.md`.
 - Checks not executed: Ubuntu installation, SSH to GPU host, host inventory,
   container CUDA computation, Kubernetes GPU allocation. The target is not accessible.
 - Manifest validation: not applicable; no deployment manifests added yet.

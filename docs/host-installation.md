@@ -4,6 +4,11 @@ This guide prepares an Intel/AMD PC for later inference deployment. It does not
 install Kubernetes or assume a particular disk, network, or user account. Ubuntu
 Server is optional, not mandatory. Use local console access throughout installation.
 
+Selected baseline: **Ubuntu Desktop 26.04 LTS, amd64**; see the
+[decision record](adr/0001-ubuntu-desktop-26-04.md). The previously verified USB
+contains **24.04**, not 26.04. To follow this baseline, obtain and verify the
+26.04 ISO and recreate the installer; the older checksum does not apply.
+
 **Never run flashing or partitioning commands against a guessed disk.** This
 repository supplies no unattended disk-writing script. Stop whenever the target
 or consequences are unclear.
@@ -41,8 +46,8 @@ target. Validate that both operating systems still boot afterward if using dual 
 
 ## 2. Download and verify installation media (management computer)
 
-1. Open the [official Ubuntu 24.04 release directory](https://releases.ubuntu.com/24.04/).
-   Select an Ubuntu **Desktop 24.04 LTS amd64** ISO, not Server or ARM64. The ISO
+1. Open the [official Ubuntu 26.04 release directory](https://releases.ubuntu.com/26.04/).
+   Select an Ubuntu **Desktop 26.04 LTS amd64** ISO, not Server or ARM64. The ISO
    architecture follows the target PC, even when downloading on an Apple Silicon Mac.
 2. Download the ISO, `SHA256SUMS`, and `SHA256SUMS.gpg` from that same release
    directory into a download folder outside Git. Record the exact ISO filename.
@@ -65,7 +70,7 @@ target. Validate that both operating systems still boot afterward if using dual 
    still necessary; a recorded ISO does not freeze the eventual host packages.
 
 Do not choose “latest” blindly: the primary download page may offer a newer LTS
-than this guide's 24.04 baseline. Exact media selection and verification are a
+than this guide's 26.04 LTS baseline. Exact media selection and verification are a
 manual gate; no installation image was downloaded or verified by the agent.
 
 ## 3. Flash the USB (macOS path)

@@ -5,7 +5,18 @@ runtime combination is claimed supported end-to-end by this project yet.
 
 ## Proposed baseline, not installed versions
 
-- Host: Ubuntu Desktop 24.04 LTS, amd64 (Server is an alternative).
+- Host: Ubuntu Desktop 26.04 LTS, amd64 (Server is an alternative); selected by
+  the owner, superseding the original 24.04 proposal. See
+  [the decision record](adr/0001-ubuntu-desktop-26-04.md).
+- Ubuntu 26.04 ISO filename/digest/signature, USB creation, installation, and
+  host compatibility checks: pending. The 24.04 media below does not verify 26.04.
+- Driver branch: discover from the actual host before CUDA runtime selection.
+- Runtime, NVIDIA Container Toolkit, Kubernetes, device-plugin chart, CUDA test
+  image/digest, Argo CD, vLLM image/digest, model revision: not selected/deployed.
+- llm-d/LMCache: deferred until prerequisite milestones pass.
+
+## Historical media evidence — Ubuntu 24.04, not the selected baseline
+
 - Verified installation media (2026-10-17): `ubuntu-24.04.5.1-desktop-amd64.iso`,
   6,250,332,160 bytes, downloaded from
   `https://releases.ubuntu.com/24.04/ubuntu-24.04.5.1-desktop-amd64.iso`.
@@ -18,10 +29,6 @@ runtime combination is claimed supported end-to-end by this project yet.
   Wrote 6,250,332,160 bytes to the approved SanDisk USB, read back the full ISO
   byte range with the same SHA-256, and successfully ejected the device.
   This verifies installation media, not actual PC boot or the installed host.
-- Driver branch: discover from the actual host before CUDA runtime selection.
-- Runtime, NVIDIA Container Toolkit, Kubernetes, device-plugin chart, CUDA test
-  image/digest, Argo CD, vLLM image/digest, model revision: not selected/deployed.
-- llm-d/LMCache: deferred until prerequisite milestones pass.
 
 ## Observations supplied by the owner (not independently verified)
 

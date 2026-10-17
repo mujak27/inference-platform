@@ -19,13 +19,14 @@ capacity. A Mac, Linux machine, or Windows SSH client can perform this role.
 
 ## Reference host option
 
-Use **Ubuntu Desktop 24.04 LTS, amd64** as the initial documented path for an
+Use **Ubuntu Desktop 26.04 LTS, amd64** as the selected documented path for an
 Intel/AMD PC. It offers a graphical installer and local troubleshooting tools.
-Ubuntu Server 24.04 LTS is an equally valid headless alternative; platform
+Ubuntu Server 26.04 LTS is a headless alternative; platform
 workloads must not depend on the desktop environment.
 
-24.04 is a conservative starting baseline, not a claim that newer releases are
-unsupported. As checked on 2026-10-17, NVIDIA Container Toolkit's platform table
+The owner selected 26.04 LTS instead of the original 24.04 proposal; see
+[the decision record](adr/0001-ubuntu-desktop-26-04.md).
+As checked on 2026-10-17, NVIDIA Container Toolkit's platform table
 lists both Ubuntu 24.04 and 26.04. The complete driver/runtime/Kubernetes/vLLM
 combination is **not yet selected or tested**. No OS release alone establishes it.
 
