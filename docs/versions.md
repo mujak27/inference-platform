@@ -47,6 +47,15 @@ CUDA computation, Kubernetes allocation/storage, inference, recovery, and
 post-reboot checks remain separate acceptance gates. See
 [issue #3](https://github.com/mujak27/inference-platform/issues/3).
 
+Redacted evidence locator: `<workspace-docs>/inference-platform-private/`, where
+`<workspace-docs>` is the owner's shared local workspace documentation directory,
+outside every repository/worktree. Supporting artifacts dated 2026-10-17:
+`approved-ssh-change-2026-10-17.txt`, `approved-firewall-change-2026-10-17.txt`,
+`approved-swap-change-2026-10-17.txt`, `post-change-verification-2026-10-17.txt`,
+and `host-preflight-after-changes-2026-10-17.txt`. The private `host-access.md`
+in that directory records the exact access and backup locations. These files
+are owner-only; do not upload them without reviewing and redacting their contents.
+
 ## Proposed baseline, not installed versions
 
 - Host: Ubuntu Desktop 26.04 LTS, amd64 (Server is an alternative); selected by
