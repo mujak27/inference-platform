@@ -1,0 +1,7 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: argocd
+resources:
+  - namespace.yaml
+  # Argo CD v3.5.5, pinned to its release commit.
+  - https://raw.githubusercontent.com/argoproj/argo-cd/a5038b0e2bbac1715754380ae0084df8e3d5b48c/manifests/install.yaml
