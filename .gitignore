@@ -1,0 +1,15 @@
+.DS_Store
+__pycache__/
+*.pyc
+.env
+.env.*
+!.env.example
+*.iso
+*.img
+*.qcow2
+*.safetensors
+*.gguf
+*.pem
+*.key
+kubeconfig*
+.local/
