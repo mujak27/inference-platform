@@ -1,14 +1,16 @@
 # Inference platform
 
 A reproducible, GitOps-managed Kubernetes inference platform, built incrementally
-with vLLM, llm-d, and LMCache. **Status as of 2026-10-18: one vLLM replica is
-deployed and serving real inference through a private OpenAI-compatible API.**
+with vLLM, llm-d, and LMCache. **Status as of 2026-10-18: one vLLM replica
+serves real Qwen3 inference privately, and the llm-d router has passed a bounded
+single-backend real-model routing smoke test.** This is an MVP observation, not
+broad llm-d qualification or production readiness. See the
+[llm-d runtime evidence](docs/versions.md#real-llm-d-mvp-execution--issues-1519-2026-10-18).
 Manual Git config change/revert, storage-preserving stop/start, and a quiescent
 K3s SQLite + token backup are verified under issue #7. The llm-d router is a
-registered manual, non-cascading Argo Application with a committed render that
-passes local render, policy and schema checks, but it has **not** been synced or
-exercised on the cluster. Smoke timings are not benchmarks; full restore, live
-llm-d routing and LMCache remain pending.
+registered manual, non-cascading Argo Application; its CRD admission, manual sync,
+and routed SSE to the sole real vLLM backend were observed. Smoke timings are not
+benchmarks. Full restore, broader llm-d qualification, and LMCache remain pending.
 
 ## Current status
 
@@ -27,14 +29,15 @@ llm-d routing and LMCache remain pending.
   [version/evidence record](docs/versions.md#observed-rollback-stopstart-and-sqlite-backup--issue-7-2026-10-18).
 - **Private access only:** ClusterIP Service and loopback port-forwarding; no
   public inference endpoint. Argo sync is manual, not automatic.
-- **Registered, not deployed:** the llm-d router child Application
+- **Verified bounded MVP:** the llm-d router child Application
   (`apps/llmd/application.yaml` → `apps/llmd/overlays/single-replica`) and the
   pinned GAIE v1.5.0 `InferencePool` CRD (`bootstrap/llmd/crds.yaml`) are
-  committed. CRD admission, the `llmd` Argo sync and routed SSE against the real
-  backend are **pending live execution**.
+  committed; CRD admission and manual `llmd` sync succeeded. One routed SSE was
+  attributed to the sole real backend. This does not qualify failover, cache
+  metrics, certificate behavior, failure/cancellation, or scaling.
 - **Still planned:** full K3s restore rehearsal and token bootstrap/decryption,
-  two replicas/GPU sharing, llm-d routing, LMCache, serving-workload reboot
-  survival, load tests, and benchmarks. Long-run stability has not been verified.
+  two replicas/GPU sharing, LMCache, serving-workload reboot survival, load tests,
+  and benchmarks. Long-run stability has not been verified.
   This is a lab deployment, not a production-readiness claim.
 
 The root Argo Application has a known cosmetic OutOfSync difference caused by an
@@ -69,15 +72,22 @@ header with a bounded timeout:
 ```sh
 kubectl --kubeconfig "$KUBECONFIG_PRIVATE" --context "$CONTEXT" \
   -n inference port-forward --address 127.0.0.1 svc/llmd-epp 8081:80
+```
+
+Keep that port-forward terminal running. In another terminal, run the bounded
+streaming smoke test:
+
+```sh
 python3 scripts/smoke-test.py --base-url http://127.0.0.1:8081 --require-routed --timeout 30
 ```
 
 `--require-routed` fails unless the response carries
 `x-went-into-resp-headers: true`; the printed JSON summary reports `routed` and
-`server`. That header is EPP's response-path signal only — full real-backend
-attribution also correlates the request in the live `vllm` pod
-(`kubectl -n inference logs` / `/metrics`). This routed path has **not** been
-executed against the cluster yet.
+`server`. That header is EPP's response-path signal only — the recorded real-backend
+attribution additionally correlated the request with the live `vllm` success
+counter. For new requests, inspect the live backend's logs/metrics as well; the
+header alone does not prove backend attribution. The verified run is a single
+backend smoke test, not a routing or performance qualification.
 
 ## Reproduce on another host
 
@@ -106,20 +116,21 @@ and the management computer are operator-specific and are not baked into workloa
 
 ## Serving path
 
-Current:
+Direct backend bypass:
 
 ```text
 Private client → loopback port-forward → vLLM (Qwen3-1.7B)
                                           └── one NVIDIA GPU + persistent model cache
 ```
 
-Planned:
+Current bounded MVP (one backend):
 
 ```text
-Private client → llm-d gateway/scheduler → vLLM A or vLLM B
-                                           └── one shared NVIDIA GPU
-                                               optional LMCache CPU tier later
+Private client → loopback port-forward → llm-d gateway/scheduler → vLLM
+                                                                  └── one NVIDIA GPU + persistent model cache
 ```
+
+Future work: multiple vLLM replicas/GPU sharing and optional LMCache CPU tier.
 
 The initial validation target is a single RTX 3090 (24 GB VRAM) with 128 GB host
 RAM. Two replicas on it demonstrate routing and lifecycle behavior, **not**
@@ -132,21 +143,22 @@ No model weights, credentials, installation images, or raw host inventories belo
 ## GitOps deployment
 
 [GitOps guide](docs/gitops.md): `bootstrap/`, `infra/`, and `apps/` follow the
-[k8s-crossplane layout](https://github.com/mujak27/k8s-crossplane). A pinned Argo CD
-bootstrap and single-replica vLLM configuration have been deployed and observed.
-Both Applications still require manual sync without pruning; merging changes does
-not authorize deployment. See the version/evidence record for host, GPU, storage and serving
-results and their limits. Manual Git rollback, stop/start and a quiescent
+[k8s-crossplane layout](https://github.com/mujak27/k8s-crossplane). The pinned Argo CD
+installation, single-replica vLLM application, and single-backend llm-d router have
+been deployed and observed. Applications require manual sync without pruning; merging
+changes does not authorize deployment. See the version/evidence record for host, GPU,
+storage and serving results and their limits. Manual Git rollback, stop/start and a quiescent
 SQLite/token backup were verified under issue #7; full restore remains pending.
 
 [Operations and recovery](docs/recovery.md) covers private access, approval-gated
 Git rollback and stop/start, SQLite/token backup, and untested restore preparation.
 
-[llm-d qualification sources](docs/llmd-preparation.md) and the separate
-[CPU-only simulator](docs/llmd-simulator.md) now cover the registered real router
-Application; the simulator candidate remains unregistered. Source checks and the
-committed render do not establish pinned EPP/Envoy acceptance, live CRD admission
-or runtime compatibility.
+[llm-d qualification sources](docs/llmd-preparation.md) record the bounded
+runtime MVP and deferred acceptance gates; the separate
+[CPU-only simulator](docs/llmd-simulator.md) remains an unregistered candidate.
+The observed single-backend route does not establish cache-metrics correctness,
+certificate behavior, failure/cancellation semantics, multi-backend routing,
+load, HA, or performance.
 
 ## Local checks
 
