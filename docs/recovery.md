@@ -2,20 +2,23 @@
 
 ## Evidence boundary — 2026-10-18
 
-[Issue #7](https://github.com/mujak27/inference-platform/issues/7) is pending.
-This is an operator procedure, **not execution evidence or operational approval**.
-The [version record](versions.md#observed-gitops-bootstrap-and-first-serving--issue-6)
-contains observed installation, private access, GPU allocation, retained storage,
-one Ready vLLM replica and real streaming under issues #3–#6. The last recorded
-child sync was `e2b9b8f4c0757df0b37ba8f66982bcd405d66afa`; integrated baseline
-`8eb55b437994afee49e79335617f602e9cc47d44` has the same operational tree, not a
-separately observed sync. Pins and exact OS/kernel/driver/package versions are
-in that record; do not substitute a documentation commit for a live revision.
+[Issue #7](https://github.com/mujak27/inference-platform/issues/7) exercises have
+now been executed and observed. This document remains the operator procedure; the
+[version record](versions.md#observed-rollback-stopstart-and-sqlite-backup--issue-7-2026-10-18)
+holds the observed results and their limits. That record contains observed
+installation, private access, GPU allocation, retained storage, one Ready vLLM
+replica and real streaming under issues #3–#6, plus the issue #7 manual
+configuration change and Git revert, the storage-preserving `replicas` 1→0→1
+exercise, and the quiescent SQLite/paired-token backup with off-host transfer and
+disposable SQLite integrity check. Pins and exact OS/kernel/driver/package versions
+are in that record; do not substitute a documentation commit for a live revision.
 
-Issue #7's configuration change/Git revert, replicas 1→0→1, SQLite/token backup,
-off-host transfer and integrity checks have **not been executed**. Full K3s
-restore and token bootstrap/decryption are **UNTESTED**. Earlier pod-replacement
-cache reuse is not the issue #7 stop/start exercise; smoke timings are not benchmarks.
+The issue #7 configuration change/Git revert (`90db167` → `53f8313`), replicas
+1→0→1 (`7660b44` → `b96d69a`), and the quiescent SQLite/token backup, off-host
+transfer and integrity checks were executed and verified on 2026-10-18. **Full K3s
+restore and token bootstrap/decryption remain UNTESTED.** Earlier pod-replacement
+cache reuse is not the issue #7 stop/start exercise; smoke timings are not
+benchmarks. Each future execution still requires its own approval.
 
 ## Approval and private access
 
@@ -92,7 +95,14 @@ vectors/tool hashes, durations and pass/fail/skipped outcomes. Omit addresses,
 usernames, node/storage identities, raw logs/manifests, credentials and token hashes.
 Update [versions](versions.md) and [milestones](milestones.md) only with observations.
 
-## Manual configuration change and Git rollback — proposed
+## Manual configuration change and Git rollback — observed (issue #7, 2026-10-18)
+
+Executed and verified on 2026-10-18: the reviewed `MAX_NUM_SEQS` 4→3 change
+(merged `90db167`) and its clean Git revert (`53f8313`) were each manually
+child-synced, observed live and confirmed with real streaming — see the
+[version record](versions.md#observed-rollback-stopstart-and-sqlite-backup--issue-7-2026-10-18).
+The steps below remain the approved procedure; that result does not re-authorize a
+new change or sync, and any future execution needs its own approval.
 
 1. Review a demonstration commit changing **only** `MAX_NUM_SEQS=4` to `3` in
    `apps/vllm/base/kustomization.yaml` and its exact expectation in
@@ -116,7 +126,13 @@ Update [versions](versions.md) and [milestones](milestones.md) only with observa
    and successful real streaming. No history rewrite, direct patch, Argo history
    rollback or `kubectl rollout undo` substitutes for this Git recovery proof.
 
-## Storage-preserving stop/start — separate proposed exercise
+## Storage-preserving stop/start — observed (issue #7, 2026-10-18)
+
+Executed and verified on 2026-10-18 with Git commits `7660b44` (stop) and `b96d69a`
+(start); the restarted pod reused cached weights from the retained PVC with no
+re-download — see the
+[version record](versions.md#observed-rollback-stopstart-and-sqlite-backup--issue-7-2026-10-18).
+The steps below remain the approved procedure and still require separate approval.
 
 Use reviewed Git commits to change `count: 1` to `0`, then back to `1` in
 `apps/vllm/overlays/single-replica/kustomization.yaml`, each owner-merged and
@@ -147,7 +163,15 @@ data. No retention test by deleting real storage, cascade deletion, uninstall or
 routine Namespace/PVC/PV deletion. Root deletion does not stop inference. Inventory
 old hashed ConfigMaps left by no-prune sync; do not clean them up as rollback.
 
-## SQLite and paired-token backup — approval-gated sequence, NOT RUN
+## SQLite and paired-token backup — observed and validated; restore UNTESTED
+
+Executed and validated on 2026-10-18: a quiescent stopped copy of `server/db/` plus
+the paired server token and allowlisted prerequisites was packaged, SHA-256
+verified, transferred over strict-host-key SSH to encrypted off-host storage, and
+checked with a disposable SQLite `integrity_check`/`foreign_key_check` — see the
+[version record](versions.md#observed-rollback-stopstart-and-sqlite-backup--issue-7-2026-10-18).
+**Full K3s restore and token bootstrap/decryption remain UNTESTED**, and this
+sequence remains approval-gated for any future execution.
 
 [K3s documents copying the SQLite `server/db/` directory and retaining its matching
 server token](https://docs.k3s.io/datastore/backup-restore). It does **not explicitly

@@ -143,10 +143,47 @@ serving workload. K3s bootstrap, standalone CUDA computation, Kubernetes GPU
 allocation, pod-replacement storage and reboot survival are verified under
 issues #4–#5.
 
-Issue #6 is closed after the evidence merge. Next concrete action: preparation
-for issue #7's rollback, storage-preserving stop/start and backup/recovery work.
-These exercises remain unverified and require separate operational approval.
-llm-d, sharing, and LMCache remain deferred.
+Issue #6 is closed after the evidence merge. Issue #7 then executed and observed
+the manual Git configuration change and revert, the storage-preserving stop/start,
+and the quiescent SQLite/paired-token backup (observed section below). Full K3s
+restore, serving-workload reboot survival, two-replica GPU sharing
+([#15](https://github.com/mujak27/inference-platform/issues/15)), llm-d
+([#16](https://github.com/mujak27/inference-platform/issues/16)/[#17](https://github.com/mujak27/inference-platform/issues/17)),
+observability/benchmarks, and LMCache remain unverified or deferred and each still
+needs separate operational approval.
+
+## Rollback, stop/start, and recovery — observed (issue #7, 2026-10-18)
+
+Changes: none to the workload; this issue exercised the existing desired state
+through Git. Full detail and limitations are in
+[`docs/versions.md`](versions.md#observed-rollback-stopstart-and-sqlite-backup--issue-7-2026-10-18).
+
+- A reviewed `MAX_NUM_SEQS` 4→3 change (PR #28, merged `90db167`) was manually
+  child-synced with `prune=false`; the live ConfigMap, runtime env and startup logs
+  all showed 3, and a real SSE smoke test passed. Because `origin/main` had
+  advanced with unrelated llm-d preparation, Argo recorded revision `a5a8574`
+  (empty operational diff against `90db167`); the evidence does not claim a sync at
+  the pinned SHA.
+- A clean `git revert` was merged as `53f8313` and manually child-synced; the
+  restored ConfigMap (`vllm-config-479km22f89`, `MAX_NUM_SEQS=4`) served again
+  (real SSE passed). The unpruned old ConfigMap remained, honestly proving
+  `prune=false` and the resulting child `OutOfSync`/`Healthy`.
+- The storage-preserving stop/start used Git commits `7660b44` (`count: 1 → 0`) and
+  `b96d69a` (revert back to 1). At zero, the deployment had 0 replicas/pods, no
+  ready endpoints, and GPU memory fell from 19,084 to 120 MiB; the Namespace/PVC/PV
+  identities, `Retain` policy, `Prune=false,Delete=false` annotations and the model
+  cache were unchanged. At one, a new pod was Ready in ~75.6 s and loaded weights
+  from the retained PVC in 0.61 s with no re-download; real SSE passed.
+- A quiescent K3s stop (`09:17:46Z`) allowed a root copy of `server/db/` (3 files,
+  13,648,472 logical bytes) plus the paired `server/token` and allowlisted
+  prerequisites, byte-checked against the stopped sources; K3s restarted at
+  `09:18:16Z` (30 s interruption). The archive (SHA-256
+  `95bbe80b…`) was transferred to encrypted off-host storage and a disposable
+  SQLite copy passed `PRAGMA integrity_check` = `ok` and an empty
+  `foreign_key_check`. Post-start cluster health and real SSE passed.
+- Honest boundary: **full K3s restore and token bootstrap/decryption remain
+  UNTESTED.** No restore, upgrade, storage deletion or performance calibration was
+  performed.
 
 ## Runtime milestones
 
@@ -154,8 +191,12 @@ llm-d, sharing, and LMCache remain deferred.
    bounded shared memory, private Service, real streaming smoke test.~~
    **Verified under issue #6** — see the observed section above and
    `docs/versions.md` for evidence and limitations.
-2. GitOps: Argo CD, declared desired state, readiness ordering, schema/render
-   checks, reconciliation/rollback proof, persistent-data retention guidance.
+2. ~~GitOps: Argo CD, declared desired state, readiness ordering, schema/render
+   checks, reconciliation/rollback proof, persistent-data retention guidance.~~
+   **Verified under issues #6–#7** — bootstrap/first serving under #6 and
+   change/revert, storage-preserving stop/start and quiescent SQLite/token backup
+   under #7; see the observed sections above and `docs/versions.md` for evidence
+   and limitations. Full K3s restore and token bootstrap/decryption remain untested.
 3. Two real replicas on one shared GPU: separate output verification, stable
    concurrency/memory, safe rolling updates without a third GPU share.
 4. llm-d: compatible gateway/scheduler, endpoint-selection evidence, pod-removal

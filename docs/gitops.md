@@ -1,10 +1,12 @@
-# GitOps foundation (deployed; recovery pending)
+# GitOps foundation (deployed and recovery-verified)
 
-Issue #6 verified bootstrap and real streaming inference; see
-[observed versions and evidence](versions.md#observed-gitops-bootstrap-and-first-serving--issue-6).
+Issue #6 verified bootstrap and real streaming inference, and issue #7 verified the
+manual Git change/revert, storage-preserving stop/start and quiescent SQLite/token
+backup; see
+[observed versions and evidence](versions.md#observed-rollback-stopstart-and-sqlite-backup--issue-7-2026-10-18).
 The bootstrap commands below are first-install instructions, not commands to
-rerun on the working cluster. Issue #7's rollback, stop/start and backup/recovery
-exercises remain unverified; each operation needs its own approval.
+rerun on the working cluster. Each future operation still needs its own approval;
+full K3s restore remains untested.
 
 This follows the directory conventions of
 [mujak27/k8s-crossplane](https://github.com/mujak27/k8s-crossplane):
@@ -167,14 +169,18 @@ Verify content actually arrives before completion on the real endpoint; simulato
 fixtures in unit tests do not establish real model output or streaming behavior.
 Save pod readiness, logs, idle/load GPU memory, exact commit, and command output
 as redacted evidence. Serving and child Argo Synced/Healthy were observed under
-issue #6; manual Git rollback and recovery remain pending under issue #7.
+issue #6; the manual Git change/revert, storage-preserving stop/start and quiescent
+SQLite/token backup were observed under issue #7 (see the
+[version record](versions.md#observed-rollback-stopstart-and-sqlite-backup--issue-7-2026-10-18)).
+Full K3s restore remains untested.
 
 ## Change, rollback, and cleanup
 
 Use the [operations and recovery runbook](recovery.md) for the exact-SHA,
 child-only change/Git-revert and replicas 1→0→1 procedures, evidence gates,
-SQLite/token backup and untested restore preparation. These remain approval-gated,
-not completed exercises.
+SQLite/token backup and untested restore preparation. Each operation remains
+approval-gated; the issue #7 executions and observed results are recorded in the
+version record.
 
 Edit model/revision, precision, context, concurrency, and GPU budget through the
 base ConfigMap generator or an overlay merge. Config hashes roll pods when
@@ -184,9 +190,10 @@ must keep model/tokenizer revision and the client served-model name consistent.
 
 Once real serving works, prove reconciliation by committing a small reviewed
 config change, manually syncing vLLM, and recording its observed effect. Revert
-that commit and sync again to prove rollback. Do not declare milestone 2 verified
-until those runtime observations and Synced/Healthy evidence exist. Auto-sync can
-be enabled in a later reviewed change after this manual recovery path works.
+that commit and sync again to prove rollback. This was completed under issue #7
+(`90db167` → `53f8313`), which verified milestone 2; see the version record.
+Auto-sync can be enabled in a later reviewed change after this manual recovery
+path works.
 
 Neither Application has a resources finalizer; normal non-cascading deletion
 leaves workloads behind. **Do not choose cascading deletion in the UI.** The

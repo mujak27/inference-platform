@@ -3,8 +3,9 @@
 A reproducible, GitOps-managed Kubernetes inference platform, built incrementally
 with vLLM, llm-d, and LMCache. **Status as of 2026-10-18: one vLLM replica is
 deployed and serving real inference through a private OpenAI-compatible API.**
-Rollback, stop/start and backup/recovery remain unverified under issue #7.
-Smoke timings are not benchmarks; llm-d and LMCache remain deferred.
+Manual Git config change/revert, storage-preserving stop/start, and a quiescent
+K3s SQLite + token backup are verified under issue #7. Smoke timings are not
+benchmarks; full restore, llm-d and LMCache remain deferred.
 
 ## Current status
 
@@ -15,12 +16,18 @@ Smoke timings are not benchmarks; llm-d and LMCache remain deferred.
   HTTP 200, and pod replacement with retained model weights and no re-download.
   The 20 GiB model PVC is Bound using a Retain-policy volume. Cluster/storage
   reboot survival was verified before serving deployment.
+- **Recovery-verified (issue #7):** a manual Git config change and clean revert
+  (`MAX_NUM_SEQS` 4→3→4), storage-preserving stop/start (`replicas` 1→0→1 with
+  cached-weight reuse from the retained PVC and no re-download), and a quiescent
+  K3s SQLite + paired-token backup with encrypted off-host transfer and a
+  disposable SQLite integrity check. See the
+  [version/evidence record](docs/versions.md#observed-rollback-stopstart-and-sqlite-backup--issue-7-2026-10-18).
 - **Private access only:** ClusterIP Service and loopback port-forwarding; no
   public inference endpoint. Argo sync is manual, not automatic.
-- **Still planned:** two replicas/GPU sharing, llm-d routing, LMCache, formal
-  reconciliation/rollback proof, load tests, and benchmarks. Serving-workload
-  reboot survival and long-run stability have not been verified. This is a lab
-  deployment, not a production-readiness claim.
+- **Still planned:** full K3s restore rehearsal and token bootstrap/decryption,
+  two replicas/GPU sharing, llm-d routing, LMCache, serving-workload reboot
+  survival, load tests, and benchmarks. Long-run stability has not been verified.
+  This is a lab deployment, not a production-readiness claim.
 
 The root Argo Application has a known cosmetic OutOfSync difference caused by an
 empty `syncPolicy: {}`; the vLLM child is healthy. See the
@@ -103,8 +110,8 @@ No model weights, credentials, installation images, or raw host inventories belo
 bootstrap and single-replica vLLM configuration have been deployed and observed.
 Both Applications still require manual sync without pruning; merging changes does
 not authorize deployment. See the version/evidence record for host, GPU, storage and serving
-results and their limits. Manual Git rollback, stop/start and backup/recovery
-acceptance remain pending under issue #7.
+results and their limits. Manual Git rollback, stop/start and a quiescent
+SQLite/token backup were verified under issue #7; full restore remains pending.
 
 [Operations and recovery](docs/recovery.md) covers private access, approval-gated
 Git rollback and stop/start, SQLite/token backup, and untested restore preparation.

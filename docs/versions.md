@@ -47,8 +47,10 @@ and schema execution; no broader candidate-runtime authorization was inferred.
 Documentation research and host inspection dates: **2026-10-17–18**. Private SSH
 inventory and approved host-baseline changes have been verified. The selected
 runtime combination passed observed CUDA, allocation, storage and streaming
-checks under issues #4–#6. Rollback, stop/start and backup/recovery remain
-unverified under issue #7; these checks do not establish HA or performance claims.
+checks under issues #4–#6. Rollback, stop/start and a quiescent SQLite/token
+backup were subsequently executed and observed under issue #7 (below); **full K3s
+restore remains untested**, and these checks do not establish HA or performance
+claims.
 
 ## Kubernetes GPU allocation — issue #5, Stage A
 
@@ -530,6 +532,115 @@ explicit reviewed SHA, no prune, no force/replace, no auto-sync.
 - Static validation (23 unit tests; schema suite 74 resources, 71 valid,
   0 invalid/errors, 3 CRDs skipped) is separate from the live results above.
 
+## Observed rollback, stop/start, and SQLite backup — issue #7 (2026-10-18)
+
+All operations used the checksummed kubectl 1.35.9 and the owner-only kubeconfig
+over strict-host-key SSH loopback tunnels with certificate verification; the Argo
+API TLS pin was read from the live `argocd-secret` serving certificate. Both
+Applications track `main`; every sync used an explicit reviewed SHA with
+`prune=false` and no force/replace or auto-sync. Smoke figures are single-request
+client observations, not benchmarks.
+
+### Fresh baseline — 2026-10-18T05:28–05:33Z
+
+- Read-only single observer. Started from integrated commit
+  `8eb55b437994afee49e79335617f602e9cc47d44`; the operational tree
+  (`apps`, `bootstrap`, `infra`, `scripts/smoke-test.py`) is identical to the
+  child-synced `e2b9b8f4c0757df0b37ba8f66982bcd405d66afa`. No repository edit,
+  sync, backup, service interruption or cluster/host mutation.
+- Pod `vllm-57fb69c78b-r78kw` Ready (1/1, 0 restarts); child Application
+  Synced/Healthy; the root cosmetic `OutOfSync` difference was unchanged.
+  Deployment generation 2.
+- Live generated ConfigMap `vllm-config-479km22f89` carried `MAX_NUM_SEQS=4`;
+  startup logs independently exposed parsed engine `max_num_seqs=4`.
+- Model cache byte-identical to the issue-6 listing: 71 entries, 39 regular files,
+  4,063,515,592 weight bytes. Idle GPU **19,084 / 24,576 MiB**, 0%; root free about
+  390.33 GiB. One real SSE smoke test passed (exit 0, 64 chunks, first content
+  0.076 s, end-to-end 0.421 s).
+
+### Manual configuration change `MAX_NUM_SEQS: 4 → 3` — 2026-10-18T06:08–06:25Z
+
+- Reviewed PR #28 (feature `546c815`, merged
+  `90db167f23a247ba0a8debc2c8d967f228fb855a`) changed only the two reviewed lines
+  in `apps/vllm/base/kustomization.yaml` and `tests/test_gitops.py`. One manual
+  child `vllm` sync was submitted (`prune=false`, no force/replace/auto-sync) and
+  Succeeded at `2026-10-18T06:08:15Z`.
+- **Honest reconciliation deviation:** `origin/main` had advanced with unrelated
+  llm-d preparation (#29/#30) while the child `targetRevision` tracks `main`, so
+  Argo reconciled and recorded revision
+  `a5a857469bec333c516c2452e72f3a86d724a93d`, not the pinned `90db167`. The diff
+  between the two for `apps/vllm`, `bootstrap`, `infra` and `scripts/smoke-test.py`
+  is empty, so the deployed operational content is exactly the reviewed two-line
+  change. The evidence does not claim a sync at `90db167`.
+- Replacement pod `vllm-56794c6c45-v9j2s` Ready about **61 s** after the sync
+  (0 restarts, Deployment generation 2→3). New generated ConfigMap
+  `vllm-config-9fdmtttt97` carried `MAX_NUM_SEQS=3`; pod env and startup logs
+  independently showed runtime `MAX_NUM_SEQS=3` and parsed `max_num_seqs=3`.
+- Cache byte-identical (71 entries, 39 regular files, 4,063,515,592 weight bytes;
+  no re-download). One real SSE smoke test passed (exit 0, 64 chunks, first content
+  0.166 s, end-to-end 0.516 s).
+
+### Git revert `MAX_NUM_SEQS: 3 → 4` — 2026-10-18T08:26–08:59Z
+
+- Normal `git revert` of `90db167` (no history rewrite), pushed to `main` as
+  `53f83131fab218c980c4a4d565c6b59a6285fd46`. One manual child `vllm` sync
+  (`prune=false`) Succeeded at `2026-10-18T08:26:59Z` with Argo recorded revision
+  `53f83131fab218c980c4a4d565c6b59a6285fd46`.
+- Replacement pod `vllm-57fb69c78b-5fkm7` Ready about **74 s** after the sync
+  (0 restarts, Deployment generation 3→4).
+- Active ConfigMap restored to `vllm-config-479km22f89` (`MAX_NUM_SEQS=4`) while
+  the unpruned `vllm-config-9fdmtttt97` (`MAX_NUM_SEQS=3`) remained in the
+  namespace, demonstrating `prune=false`; the child consequently reported
+  `OutOfSync`/`Healthy`. Runtime env and parsed engine logs both showed 4.
+- Cache byte-identical. One real SSE smoke test passed (exit 0, 64 chunks, first
+  content 0.154 s, end-to-end 0.503 s); idle GPU 19,082 MiB.
+
+### Storage-preserving stop/start `replicas: 1 → 0 → 1` — 2026-10-18T09:04–09:11Z
+
+- Stop commit `7660b4477f466ccd3c3a95ad848992f39bd44139` (`count: 1 → 0` in
+  `apps/vllm/overlays/single-replica/kustomization.yaml`). One manual child sync
+  (`prune=false`) Succeeded at exact revision `7660b44…` at `2026-10-18T09:05:44Z`.
+- At zero: Deployment generation **5** (`observedGeneration` 5; desired/current/
+  ready/available replicas 0); **0 pods** in `inference`; no ready Service
+  endpoints; GPU memory fell **19,084 → 120 MiB**, releasing the ~18.5 GiB model
+  allocation while leaving desktop VRAM. Namespace (`a204aa2e…`), PVC (`cd714b12…`)
+  and PV (`896e4e17…`) UIDs were unchanged, Bound **20Gi**, PV **Retain**, the
+  `Prune=false,Delete=false` annotations intact, and the model cache byte-identical.
+- Start commit `b96d69a901ef845ac6a22e305a64e15bf7ac787a` (normal `git revert` of
+  `7660b44`, restoring `count: 1`). One manual child sync (`prune=false`) Succeeded
+  at exact revision `b96d69a…`. Replacement pod `vllm-57fb69c78b-h4kbv` Ready about
+  **75.6 s** after the sync (0 restarts, Deployment generation 6).
+- Weights loaded from the retained PVC in **0.61 s** with zero `Downloading` events
+  and no cache file additions/removals/modifications (71 entries, 39 files,
+  4,063,515,592 weight bytes). GPU memory restored to 19,082 MiB. One real SSE
+  smoke test passed (exit 0, 64 chunks, first content 0.122 s, end-to-end 0.476 s).
+
+### Quiescent K3s SQLite and paired server-token backup — 2026-10-18T09:17–09:20Z
+
+- One fail-safe root capture on the host: `systemctl stop k3s.service` at
+  `09:17:46Z`; verified `inactive` / `MainPID=0` at `09:17:48Z` and **zero** open
+  handles on `/var/lib/rancher/k3s/server/db` (`/proc/*/fd`, `lsof`, `fuser`).
+  Copied the complete `server/db/` directory (`state.db`, `state.db-shm`,
+  `state.db-wal`: 3 files, 13,648,472 logical bytes) plus the paired `server/token`
+  and allowlisted service/config/node-password prerequisites; verified
+  byte-for-byte equality against the stopped sources. Started `k3s.service` back to
+  `active` at `09:18:16Z` — **30 s total service interruption**.
+- Packaged into `/var/backups/k3s/issue7-20261018T091745Z/backup.tar`
+  (13,680,640 bytes, SHA-256
+  `95bbe80b9ccb9bc1bbfdb1bbae194ca93fb0cba6a4cdf5712b738dd57da70c56`; directories
+  0700, files 0600), transferred over strict-host-key SSH to FileVault-encrypted
+  off-host private storage (0700/0600), verified a matching SHA-256 and a safe tar
+  member allowlist, and validated a disposable writable extraction with Python
+  3.12.15 / SQLite 3.53.1 (`PRAGMA integrity_check` = `ok`,
+  `PRAGMA foreign_key_check` = `[]`, nonempty `kine` table; disposable copy removed).
+- Post-start cluster health passed (`/readyz` ok, 1 Ready node, GPU allocatable 1,
+  pod `vllm-57fb69c78b-h4kbv` Ready, storage identities/protections intact) and a
+  real SSE smoke test passed (exit 0, 64 chunks, 0.44 s).
+- Honest boundary: **“Quiescent SQLite directory and paired token archived;
+  source-to-stage byte checks, archive/transfer SHA-256 and disposable-copy SQLite
+  integrity checks passed; post-start serving checks passed. Full K3s restore and
+  token bootstrap/decryption have not been tested.”**
+
 ## Other proposed or unverified baseline items
 
 - Host: Ubuntu Desktop 26.04 LTS, amd64 (Server is an alternative); selected by
@@ -562,7 +673,10 @@ above; see the issue #6 section for live results.
   `aff1ca44984cbbcfa376c1cb6fdc4bb6aa0381fd`. No cluster version is selected by this.
 - Image/configuration/schema research date: 2026-10-17. Actual driver, PyTorch and
   package inventory, storage provisioning and streaming inference are recorded
-  above; rollback and backup/recovery acceptance remain pending.
+  above; rollback, storage-preserving stop/start and a quiescent SQLite/paired-token
+  backup with off-host transfer and disposable SQLite integrity validation were
+  subsequently observed under issue #7 (above). **Full restore remains pending and
+  untested.**
 
 See [GitOps bootstrap, validation limits, and sources](gitops.md).
 
