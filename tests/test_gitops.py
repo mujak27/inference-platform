@@ -102,7 +102,7 @@ class GitOpsTests(unittest.TestCase):
             "DTYPE": "float16",
             "TENSOR_PARALLEL_SIZE": "1",
             "MAX_MODEL_LEN": "4096",
-            "MAX_NUM_SEQS": "3",
+            "MAX_NUM_SEQS": "4",
             "GPU_MEMORY_UTILIZATION": "0.80",
         })
         for argument in (
