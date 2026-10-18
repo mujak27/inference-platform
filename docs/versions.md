@@ -1,8 +1,10 @@
 # Version and evidence record
 
 Documentation research and host inspection dates: **2026-10-17–18**. Private SSH
-inventory and approved host-baseline changes have been verified. No runtime
-combination is claimed supported end-to-end by this project yet.
+inventory and approved host-baseline changes have been verified. The selected
+runtime combination passed observed CUDA, allocation, storage and streaming
+checks under issues #4–#6. Rollback, stop/start and backup/recovery remain
+unverified under issue #7; these checks do not establish HA or performance claims.
 
 ## Kubernetes GPU allocation — issue #5, Stage A
 
@@ -492,8 +494,8 @@ explicit reviewed SHA, no prune, no force/replace, no auto-sync.
 - Ubuntu 26.04 ISO filename/digest/signature and USB creation: unverified. The
   installed OS was inspected; the 24.04 media below does not verify 26.04 media.
 - Driver: observed above, not a reason to install another branch.
-- Runtime/Toolkit/Kubernetes installation and CUDA image acceptance are observed
-  above. Device-plugin allocation/storage acceptance remains pending in issue #5.
+- Runtime/Toolkit/Kubernetes installation, CUDA image acceptance, device-plugin
+  allocation/storage and first serving are observed above under issues #4–#6.
 - llm-d/LMCache: deferred until prerequisite milestones pass.
 
 ## Prepared GitOps candidates — now deployed and observed
@@ -515,7 +517,8 @@ above; see the issue #6 section for live results.
   PyYAML 6.0.3. Kubernetes schema baseline 1.35.0 from schema-repository commit
   `aff1ca44984cbbcfa376c1cb6fdc4bb6aa0381fd`. No cluster version is selected by this.
 - Image/configuration/schema research date: 2026-10-17. Actual driver, PyTorch and
-  package inventory are recorded above; storage provisioning and inference remain pending.
+  package inventory, storage provisioning and streaming inference are recorded
+  above; rollback and backup/recovery acceptance remain pending.
 
 See [GitOps bootstrap, validation limits, and sources](gitops.md).
 

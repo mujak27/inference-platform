@@ -1,4 +1,10 @@
-# GitOps foundation (prepared, not deployed)
+# GitOps foundation (deployed; recovery pending)
+
+Issue #6 verified bootstrap and real streaming inference; see
+[observed versions and evidence](versions.md#observed-gitops-bootstrap-and-first-serving--issue-6).
+The bootstrap commands below are first-install instructions, not commands to
+rerun on the working cluster. Issue #7's rollback, stop/start and backup/recovery
+exercises remain unverified; each operation needs its own approval.
 
 This follows the directory conventions of
 [mujak27/k8s-crossplane](https://github.com/mujak27/k8s-crossplane):
@@ -20,10 +26,10 @@ apps/
 
 Do not copy the reference repository's Crossplane, ingress, TLS, or progressive
 sync components: none is required for the first serving slice. NVIDIA runtime,
-Kubernetes distribution, device plugin, and storage remain host-validation gates.
+Kubernetes distribution, device plugin, and storage were verified under issues #4–#5.
 No existing cluster is contacted by validation commands.
 
-## What is prepared
+## Declared configuration
 
 - Argo CD **v3.5.5**, installed from release commit
   `a5038b0e2bbac1715754380ae0084df8e3d5b48c`. Upstream images have explicit version
@@ -40,8 +46,9 @@ No existing cluster is contacted by validation commands.
   with Qwen/Qwen3-1.7B and tokenizer/chat template pinned to model revision
   `70d244cc86ccca08cf5af4e1e306ecf908b1ad5e`.
 - FP16, TP=1, context 4096, concurrency 4, APC enabled, GPU utilization budget
-  0.80. These are **untested single-replica starting settings**. The later 0.35
-  shared-GPU profile is deliberately not included.
+  0.80. These settings served real streaming output under issue #6, but are not
+  performance-calibrated. The later 0.35 shared-GPU profile is deliberately not
+  included.
 - `/health` startup/readiness checks; startup allows 30 minutes for download/load.
   Slow networks may require a longer window. No liveness probe restarts a busy
   engine indiscriminately. Rollouts use zero surge and permit downtime on one GPU.
@@ -159,9 +166,15 @@ client first-content and end-to-end times, not a calibrated token benchmark.
 Verify content actually arrives before completion on the real endpoint; simulator
 fixtures in unit tests do not establish real model output or streaming behavior.
 Save pod readiness, logs, idle/load GPU memory, exact commit, and command output
-as redacted evidence. Both serving and Argo Synced/Healthy remain pending now.
+as redacted evidence. Serving and child Argo Synced/Healthy were observed under
+issue #6; manual Git rollback and recovery remain pending under issue #7.
 
 ## Change, rollback, and cleanup
+
+Use the [operations and recovery runbook](recovery.md) for the exact-SHA,
+child-only change/Git-revert and replicas 1→0→1 procedures, evidence gates,
+SQLite/token backup and untested restore preparation. These remain approval-gated,
+not completed exercises.
 
 Edit model/revision, precision, context, concurrency, and GPU budget through the
 base ConfigMap generator or an overlay merge. Config hashes roll pods when

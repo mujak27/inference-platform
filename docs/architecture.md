@@ -27,8 +27,10 @@ workloads must not depend on the desktop environment.
 The owner selected 26.04 LTS instead of the original 24.04 proposal; see
 [the decision record](adr/0001-ubuntu-desktop-26-04.md).
 As checked on 2026-10-17, NVIDIA Container Toolkit's platform table
-lists both Ubuntu 24.04 and 26.04. The complete driver/runtime/Kubernetes/vLLM
-combination is **not yet selected or tested**. No OS release alone establishes it.
+lists both Ubuntu 24.04 and 26.04. The selected driver/runtime/Kubernetes/vLLM
+combination passed the separate CUDA, allocation, storage and streaming checks
+recorded in [versions.md](versions.md). Rollback and recovery remain unverified.
+No OS release alone establishes compatibility.
 
 The desktop compositor and GUI applications can consume GPU memory. Record idle
 VRAM/processes before inference tests, avoid unrelated GPU workloads, and allow
@@ -42,9 +44,10 @@ Host and GPU validation → one real vLLM replica → GitOps → two shared-GPU 
 → llm-d routing → standardized observability/benchmarks → LMCache → portfolio demo.
 
 Begin with Qwen/Qwen3-1.7B as a candidate, FP16, tensor parallelism 1, context
-4096, and concurrency 4. These untested starting settings are encoded in the
-[prepared GitOps candidate](gitops.md) with pinned model/runtime references;
-host compatibility and actual serving must be validated before adoption.
+4096, and concurrency 4. These settings are encoded in the
+[deployed GitOps configuration](gitops.md) with pinned model/runtime references
+and observed streaming output under issue #6. They are not performance-calibrated;
+other hosts need their own compatibility and serving validation.
 
 Automatic prefix caching reuses token-prefix KV state in local GPU memory;
 LMCache can extend KV storage beyond that GPU. Neither is a cache of completed

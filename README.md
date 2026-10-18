@@ -3,6 +3,8 @@
 A reproducible, GitOps-managed Kubernetes inference platform, built incrementally
 with vLLM, llm-d, and LMCache. **Status as of 2026-10-18: one vLLM replica is
 deployed and serving real inference through a private OpenAI-compatible API.**
+Rollback, stop/start and backup/recovery remain unverified under issue #7.
+Smoke timings are not benchmarks; llm-d and LMCache remain deferred.
 
 ## Current status
 
@@ -27,11 +29,13 @@ and [milestones](docs/milestones.md) for deployment evidence and limitations.
 
 ## Use the deployed model
 
-With the private cluster access configured and the correct Kubernetes context
-selected, forward the Service from your management client:
+Follow the [private-access procedure](docs/recovery.md#approval-and-private-access)
+to configure verified TLS/private cluster access. Select the target explicitly
+when forwarding the Service from your management client:
 
 ```sh
-kubectl -n inference port-forward --address 127.0.0.1 svc/vllm 8000:8000
+kubectl --kubeconfig "$KUBECONFIG_PRIVATE" --context "$CONTEXT" \
+  -n inference port-forward --address 127.0.0.1 svc/vllm 8000:8000
 ```
 
 Keep that terminal running. Configure an OpenAI-compatible client with base URL
@@ -95,12 +99,15 @@ No model weights, credentials, installation images, or raw host inventories belo
 ## GitOps deployment
 
 [GitOps guide](docs/gitops.md): `bootstrap/`, `infra/`, and `apps/` follow the
-[k8s-crossplane layout](https://github.com/mujak27/k8s-crossplane). Pinned Argo CD
-and single-replica vLLM are deployed on the reference host. Both Applications
-require manual sync without pruning; merging to `main` does not automatically
-deploy changes. The guide retains some pre-deployment wording; use the
-[version/evidence record](docs/versions.md) for observed results. llm-d and
-LMCache are not deployed yet.
+[k8s-crossplane layout](https://github.com/mujak27/k8s-crossplane). A pinned Argo CD
+bootstrap and single-replica vLLM configuration have been deployed and observed.
+Both Applications still require manual sync without pruning; merging changes does
+not authorize deployment. See the version/evidence record for host, GPU, storage and serving
+results and their limits. Manual Git rollback, stop/start and backup/recovery
+acceptance remain pending under issue #7.
+
+[Operations and recovery](docs/recovery.md) covers private access, approval-gated
+Git rollback and stop/start, SQLite/token backup, and untested restore preparation.
 
 ## Local checks
 
@@ -118,4 +125,4 @@ are documented in the GitOps guide. No configured cluster is contacted.
 Host installation is manual and intentionally does not automate partitioning,
 flashing, reboots, or firewall changes. Container CUDA computation and Kubernetes
 GPU allocation passed on the reference host; they remain separate acceptance
-gates for each new host.
+gates for each new host. Those results do not establish rollback or recovery acceptance.

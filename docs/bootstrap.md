@@ -1,7 +1,14 @@
 # Host bootstrap and private access
 
+This is a first-install guide, not a recovery script. Private SSH, the host/runtime
+baseline and first streaming inference have been observed under issues #3–#6;
+see [versions.md](versions.md) for evidence and limitations. Do not blindly rerun
+package upgrades or installation commands on the working host. Rollback, stop/start
+and backup/recovery acceptance remain pending under issue #7 and require separate
+operational approval.
+
 Run host commands **on the installed Ubuntu machine**, not on the management Mac.
-These are explicit manual steps, not commands the agent has executed remotely.
+The commands below are first-install examples, not an execution log.
 Keep local console access until SSH and the NVIDIA driver survive a reboot.
 
 ## 1. Update the host

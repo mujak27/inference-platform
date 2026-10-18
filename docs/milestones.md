@@ -143,8 +143,10 @@ serving workload. K3s bootstrap, standalone CUDA computation, Kubernetes GPU
 allocation, pod-replacement storage and reboot survival are verified under
 issues #4–#5.
 
-Next concrete action: closeout of issue #6 after this evidence merge. llm-d,
-sharing, and LMCache remain deferred.
+Issue #6 is closed after the evidence merge. Next concrete action: preparation
+for issue #7's rollback, storage-preserving stop/start and backup/recovery work.
+These exercises remain unverified and require separate operational approval.
+llm-d, sharing, and LMCache remain deferred.
 
 ## Runtime milestones
 
