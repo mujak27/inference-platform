@@ -116,6 +116,22 @@ class GitOpsTests(unittest.TestCase):
             self.assertIn("Delete=false", options)
         self.assertNotIn("Secret", [item["kind"] for item in self.workload])
 
+    def test_service_discovery_does_not_poison_vllm_port(self):
+        # The workload's own ClusterIP Service is named vllm, so the kubelet
+        # injects VLLM_PORT=<proto>://<addr>:<port> into every pod in the
+        # namespace. vLLM parses VLLM_PORT and rejects the URI form, crashing
+        # the container after model load. Pod-specified environment variables
+        # take precedence over service-derived ones.
+        pod = self.resource("Deployment")["spec"]["template"]["spec"]
+        explicit = {env["name"]: env.get("value") for env in pod["containers"][0].get("env", [])}
+        injected = {}
+        if pod.get("enableServiceLinks", True):
+            for service in (item for item in self.workload if item["kind"] == "Service"):
+                prefix = service["metadata"]["name"].upper().replace("-", "_")
+                port = service["spec"]["ports"][0]
+                injected[f"{prefix}_PORT"] = f"{port.get('protocol', 'TCP').lower()}://<addr>:{port['port']}"
+        self.assertEqual({**injected, **explicit}.get("VLLM_PORT", "8000"), "8000")
+
     def test_schema_extraction_requires_expected_crds(self):
         with self.assertRaisesRegex(ValueError, "lacks"):
             load_script("argocd-schemas").extract([])

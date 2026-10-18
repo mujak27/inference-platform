@@ -17,6 +17,11 @@ spec:
         app.kubernetes.io/name: vllm
     spec:
       automountServiceAccountToken: false
+      # The ClusterIP Service below shares this namespace, so the kubelet would
+      # inject VLLM_PORT=tcp://<addr>:8000 into the pod. vLLM parses VLLM_PORT
+      # and rejects the URI form, crashing after model load. The workload reads
+      # no service environment variables, so disable the injection entirely.
+      enableServiceLinks: false
       nodeSelector:
         kubernetes.io/arch: amd64
         kubernetes.io/os: linux
