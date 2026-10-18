@@ -34,11 +34,15 @@ and schema execution; no broader candidate-runtime authorization was inferred.
   or errors, **3 CRDs intentionally skipped** by its existing policy.
   CI now declares pinned source acquisition, rerenders both candidates and
   requires their full source/schema checks. It was not run remotely.
-- Pinned EPP/Envoy config acceptance,
-  signature/SBOM/advisory disposition, admission, target amd64, ext_proc,
-  telemetry and routed SSE remain **pending**. Historical arm64 Envoy validation
-  is attributed separately, not repeated or upgraded to fresh runtime evidence.
-  This does not complete #16 or unblock #17; #7 retains all host work.
+- Pinned EPP (`a5cbe60`) phase-one/phase-two plugin-registry validation
+  (`darwin/arm64`), isolated Envoy `distroless-v1.37.8` `--mode validate`
+  (`linux/arm64`), and supply-chain verification with explicit owner risk
+  acceptance (2026-10-18) for the unsigned Simulator `v0.11.2`, Envoy
+  `distroless-v1.37.8` and standalone chart `v0.11.0` pins are recorded in
+  `docs/llmd-preparation.md`. Kubernetes/CRD admission, target `linux/amd64`
+  execution, live `ext_proc`, telemetry and routed SSE remain **pending**
+  (blocked on #7 and #15). This does not complete #16 or unblock #17; #7 retains
+  all host work.
 
 Documentation research and host inspection dates: **2026-10-17–18**. Private SSH
 inventory and approved host-baseline changes have been verified. The selected

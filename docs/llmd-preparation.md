@@ -44,10 +44,14 @@ workload cleanup. No additional CRD is installed to satisfy optional watches.
 The coordinating session reported fresh registry/source metadata verification on
 2026-10-18 matching these image/chart pins and amd64 availability. This source
 implementation independently rehashed cached chart bytes only. Signature
-verification results, Trivy SARIF contents, full SBOM/package scanning and
-explicit acceptance of any new risks are recorded above and remain open before
-runtime use. Prior containerd/runc risk acceptance is not blanket acceptance of
-these images.
+verification results, Trivy SARIF contents, full SBOM/package scanning and the
+resulting unsigned-artifact risk are recorded above; explicit owner risk
+acceptance for the unsigned simulator `v0.11.2`, Envoy override
+`distroless-v1.37.8` and standalone chart `v0.11.0` was granted on 2026-10-18 for
+those exact pinned digests/checksums. That acceptance is scoped to those exact
+pins — not blanket acceptance of future tags, nor of runtime execution without
+clearing the remaining runtime gates. Prior containerd/runc risk acceptance is not
+blanket acceptance of these images.
 
 ## Pinned EPP configuration acceptance — no supported dry-run seam
 
@@ -240,7 +244,12 @@ EPP SBOM disposition is not a vulnerability scan. Envoy and vLLM advisory
 volumes (132 and 104) require per-advisory disposition against the exact pins,
 not blanket acceptance. Prior containerd/runc risk acceptance is not blanket
 acceptance of these images. Signature verification and SBOM findings above do not
-constitute explicit risk acceptance, which remains an owner decision.
+constitute explicit risk acceptance by themselves. On 2026-10-18 the owner
+explicitly accepted the unsigned-artifact, missing-SBOM and advisory-DB-lag risk
+for the exact pinned Simulator `v0.11.2@sha256:32144df7…`, Envoy
+`distroless-v1.37.8@sha256:036ffe33…` and standalone chart `v0.11.0`
+(`sha256:d5d94816…`). That acceptance does not authorize cluster deployment or
+waive the remaining target `linux/amd64` and live runtime gates.
 
 ## Compatibility/evidence matrix
 
@@ -256,7 +265,7 @@ constitute explicit risk acceptance, which remains an owner decision.
 | Target Linux amd64 interoperability | PENDING, including TLS/ext_proc/health behavior |
 | vLLM 0.31.0 vs released llm-d vLLM 0.30.0 | Preserve proven 0.31.0; compatibility pending, no silent downgrade (older baseline has fixed-vulnerability concerns) |
 | Metrics parser, cache signals, real SSE | PENDING; existing direct-vLLM serving does not prove routed compatibility |
-| Provenance signatures, SBOM/advisory disposition | EPP signature **VERIFIED** with discriminating negative control; simulator and Envoy signatures **NOT AVAILABLE** (build paths contain no signing step); Envoy advisory disposition leaves 0 open against 1.37.8 with a known DB lag; chart excluded from upstream coverage. Full detail above. Explicit risk acceptance remains an owner decision before runtime use |
+| Provenance signatures, SBOM/advisory disposition | **OWNER-ACCEPTED (2026-10-18)** for the exact pinned unsigned Simulator v0.11.2, Envoy distroless-v1.37.8 and standalone chart v0.11.0 artifacts; EPP v0.11.0 signature **VERIFIED** with discriminating negative control; Envoy advisory disposition leaves 0 open against 1.37.8 (known 1.37.9 advisory-DB lag included in acceptance). Scoped to exact digests/checksums; does not waive runtime gates |
 
 Do not close #16 from source checks alone. #7 owns host recovery operations;
 #15 owns numeric experiment limits; #17 remains blocked. Real profile includes
