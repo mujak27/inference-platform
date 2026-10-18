@@ -375,6 +375,115 @@ These inform the candidate choice; the observed CUDA assertion above, not the
 documentation, establishes this host's computation result. They do not establish
 security-advisory fixes or Kubernetes GPU allocation compatibility.
 
+## Observed GitOps bootstrap and first serving — issue #6
+
+All operations used the checksummed kubectl 1.35.9 and the owner-only
+kubeconfig over strict-host-key SSH loopback tunnels with certificate
+verification; Argo API access pinned TLS to the `argocd-secret` serving
+certificate. Argo and inference Services stayed ClusterIP with loopback
+port-forwards only. Both Applications track `main`; every sync used an
+explicit reviewed SHA, no prune, no force/replace, no auto-sync.
+
+### Argo CD bootstrap — Stage A, 2026-10-17 18:51–19:00 UTC
+
+- Installed Argo CD **v3.5.5** (release commit
+  `a5038b0e2bbac1715754380ae0084df8e3d5b48b`) by server-side apply of the
+  reviewed render (60 objects; render SHA-256
+  `03318b68026bf7861388afbed2e5f08e252d8b6c89adaa87d94d08f9ee0e07cb`) from the
+  exact merged source `21cd1c6` (PR #11). Argo pods created
+  2026-10-17T18:56:39–18:56:50Z; three CRDs Established; six Deployments and
+  the application-controller StatefulSet observed 1/1 ready across three
+  checks at 18:59:54–19:00:29 UTC. Observed image IDs: argocd
+  `sha256:13db7b10db23283b1b36f855046602e18539a8a8204c9f6f039e8896c8897518`,
+  dex `sha256:8499afd690c437f52301efd2b05b2455da5bd2dfc20332cd697dc9937f808462`,
+  redis `sha256:08ad0b1d280850169a790dba1393ff7a90aef951fc19632cf4d3ce4f78e679ba`.
+  Upstream image tags are not digest locks; the observed IDs above are the
+  runtime record. Historical Redis secret-init startup warnings resolved
+  naturally: zero restarts, no waiting containers, pod UID set unchanged.
+
+### Credentials and root Application — Stage B, 2026-10-17 19:40 UTC
+
+- A cancelled earlier worker had left the credential state unprovable from
+  evidence; the initial admin password was tested by live login and was still
+  valid. It was rotated to a locally generated password; the replacement
+  login was independently verified and the old password rejected before
+  `argocd/argocd-initial-admin-secret` was deleted at **2026-10-17T19:40:34Z**.
+  No password or token appears in Git, evidence, or transcripts; the
+  replacement password is stored owner-only (0600) outside the repository.
+- Root Application `argocd/root` registered server-side from the reviewed
+  manifest and synced **once** at `21cd1c6`: operation Succeeded, resources
+  exactly `AppProject inference` + `Application vllm`. Both Applications are
+  manual (`syncPolicy` empty/absent) with no deletion finalizers.
+- Known benign difference: root reports `OutOfSync` because the child's
+  declared manifest carries an empty `syncPolicy: {}` that the API server does
+  not materialize live; the only spec-level diff is that empty object, a
+  semantic no-op. Not remediated; no re-sync was performed.
+
+### Child sync, observed defect, and fix — Stage C, 2026-10-18 03:37–04:34 UTC
+
+- First manual child sync at `21cd1c6` succeeded (operation Succeeded;
+  Namespace/ConfigMap/PVC/Service/Deployment created), ~**3.80 GiB** of
+  Qwen3-1.7B weights downloaded into the PVC, and the GPU allocation
+  succeeded — but the pod then crash-looped with exit 1:
+  `ValueError: VLLM_PORT 'tcp://<ip>:8000' appears to be a URI`. Root cause:
+  the Service named `vllm` in the pod's namespace makes the kubelet inject
+  `VLLM_PORT=tcp://…`; vLLM parses `VLLM_PORT` and rejects the URI form,
+  dying after model load. Fixed by **PR #13** (`enableServiceLinks: false`
+  on the pod template; issue #12), merged as **`e2b9b8f`**; a regression
+  test at the rendered-manifest seam reproduces the injected value.
+- Re-sync at `e2b9b8f`: pod `vllm-57fb69c78b-f2mrj` became Ready **71 s**
+  after sync with zero restarts; the child reached Synced/Healthy at the
+  reviewed SHA. Model-cache growth during this rollout was **0 B** (weights
+  reused from the PVC).
+
+### Observed serving acceptance — 2026-10-18 03:37–04:42 UTC
+
+- Serving pod `vllm-57fb69c78b-f2mrj` (uid `e37f4149-d677-4e0a-b284-7dc4246ea9d9`):
+  image `vllm/vllm-openai@sha256:c1c9f6fd5c109ba7f0546a59f5b2f15fb87f64c77782e90a27b648b42a8e67c3`
+  (vLLM v0.31.0), model Qwen/Qwen3-1.7B revision
+  `70d244cc86ccca08cf5af4e1e306ecf908b1ad5e`; one replica, one full
+  `nvidia.com/gpu`, TP=1, FP16, context 4096, concurrency 4, prefix caching,
+  GPU memory utilization 0.80, `runtimeClassName: nvidia`.
+- **Real streaming smoke test passed twice** (loopback port-forward to the
+  ClusterIP Service): SSE content type, nonempty incremental content before
+  completion, no server error, terminal `[DONE]`, 64 chunks. First content
+  **0.135 s** / **0.189 s**, end-to-end **0.483 s** / **0.482 s** on the two
+  runs. These are client-side smoke observations from a single 64-token
+  request at temperature 0 — **not** benchmark or throughput results.
+- GPU memory: **19,082 MiB used of 24,576 MiB** idle with the model loaded
+  (configured 0.80 utilization); ~19,084 MiB during the smoke request across
+  ~77 rapid (~0.1 s) samples. Desktop headroom preserved.
+- Disk: minimum root free **390.33 GiB** during serving; containerd growth
+  +2.5 MB; approved monitored ceilings (model +20 GiB, containerd +20 GiB,
+  logs +5 GiB, root aggregate +45 GiB; 125 GiB stop line) never approached.
+- **Pod-replacement / cache-reuse proof** (owner-approved): deleting only the
+  serving pod `vllm-57fb69c78b-f2mrj` produced replacement
+  `vllm-57fb69c78b-r78kw` Ready in **80.3 s** with zero restarts. The model
+  cache was byte-identical before and after (71 entries, 39 regular files;
+  every weight size and mtime unchanged; zero additions, removals or changes
+  — no re-download). PVC uid `cd714b12-fe18-452b-9e26-e7159fa5277d` and PV uid
+  `896e4e17-a4f6-4786-bb0f-25e9a53287f5` stayed Bound/20Gi/**Retain** with the
+  same claim mounted. The smoke test passed again after replacement.
+
+### Limitations — issue #6
+
+- Smoke timings are single-request observations, not calibrated benchmarks;
+  no concurrency, load, or long-run stability testing was performed.
+- The in-window GPU load sample relied on ~0.1 s sampling around a sub-second
+  request; the observed in-request delta (~2 MiB) is within sampling noise for
+  a tiny request.
+- Root's cosmetic `OutOfSync` (empty `syncPolicy: {}`) remains unfixed by
+  choice; it does not affect the child or serving.
+- One host, one GPU, one replica. Reboot survival of the serving workload was
+  not re-tested after deployment; the cluster itself survived a reboot earlier
+  under issue #5.
+- Existing containerd/runc advisories remain owner-accepted, **not patched**.
+  Argo CD's own components render without CPU/memory requests/limits.
+- Argo's in-container render parity with local Kustomize was not proven;
+  rendered manifests were inspected through the Argo API before each sync.
+- Static validation (23 unit tests; schema suite 74 resources, 71 valid,
+  0 invalid/errors, 3 CRDs skipped) is separate from the live results above.
+
 ## Other proposed or unverified baseline items
 
 - Host: Ubuntu Desktop 26.04 LTS, amd64 (Server is an alternative); selected by
@@ -387,9 +496,13 @@ security-advisory fixes or Kubernetes GPU allocation compatibility.
   above. Device-plugin allocation/storage acceptance remains pending in issue #5.
 - llm-d/LMCache: deferred until prerequisite milestones pass.
 
-## Prepared GitOps candidates — not deployed or hardware verified
+## Prepared GitOps candidates — now deployed and observed
+
+The pins below were verified before deployment and are recorded as observed
+above; see the issue #6 section for live results.
 
 - Argo CD v3.5.5, release commit `a5038b0e2bbac1715754380ae0084df8e3d5b48c`.
+  Installed and ready; observed image IDs in the issue #6 section.
 - vLLM v0.31.0, manifest-list digest
   `sha256:c1c9f6fd5c109ba7f0546a59f5b2f15fb87f64c77782e90a27b648b42a8e67c3`.
   Inspected amd64 manifest digest:
