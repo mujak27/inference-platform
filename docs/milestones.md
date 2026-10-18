@@ -2,7 +2,7 @@
 
 ## Milestone 0 — supported environment
 
-Status: **host/runtime, asserted CUDA, Kubernetes GPU allocation, persistent storage and reboot verified; issue-#5 PR review/merge pending**
+Status: **host/runtime, asserted CUDA, Kubernetes GPU allocation, persistent storage and reboot verified**
 
 - Changes: generic host contract; Ubuntu Desktop USB/install guide; private SSH,
   driver/bootstrap guide; read-only host preflight and local tests.
@@ -100,40 +100,58 @@ Status: **host/runtime, asserted CUDA, Kubernetes GPU allocation, persistent sto
   No model download/serving; advisories remain unpatched. See `docs/versions.md`
   for versions, observations, exposure limitations and private evidence.
 - Configuration/evidence snapshot: `f1da27dca926080274c03d280c24abe0b53efc2b`,
-  committed after approved host execution. Next: PR review/merge and issue-#5 closeout.
-  Do not start issue #6/GitOps/model serving automatically. All 20 unit tests and
-  schema checks passed: existing suite 74 resources (71 valid, 3 upstream CRDs
-  skipped), plus 5 valid storage/plugin resources; no invalid/errors.
+  committed after approved host execution. Issue #5 was merged in PR #10
+  (`7d0e9da4effa5735b48cafd31ab68560e48fb022`) and closed. All 20 unit tests
+  and schema checks passed: existing suite 74 resources (71 valid, 3 upstream
+  CRDs skipped), plus 5 valid storage/plugin resources; no invalid/errors.
 
-## GitOps and first-serving preparation — in progress, not runtime verified
+## GitOps and first serving — observed (issue #6, 2026-10-17/18)
 
 Changes: `bootstrap/`, `infra/`, and `apps/` layout; pinned Argo CD and vLLM/model
 candidates; manual non-cascading Applications; private Service and retained model
-PVC; probes and bounded shared memory; streaming smoke test; CI/static checks.
-See `docs/gitops.md` for gates, commands, rollback, and cleanup.
+PVC; probes and bounded shared memory; streaming smoke test; CI/static checks;
+plus the `enableServiceLinks: false` fix (PR #13, issue #12). See
+`docs/gitops.md` for gates, commands, rollback, and cleanup.
 
 Static checks passed on the management Mac (2026-10-17):
-`python3 -m unittest discover -s tests -v` (15 tests),
+`python3 -m unittest discover -s tests -v` (23 tests after the #12 regression
+test),
 `bash -n scripts/preflight.sh scripts/validate-manifests.sh`, and
 `bash scripts/validate-manifests.sh` (with kubeconform v0.8.0 on PATH):
 74 rendered resource instances, 71 valid, 0 invalid/errors, 3 explicitly skipped
-upstream CRD objects. An intentionally invalid Application with a numeric
-`spec.source.repoURL` was rejected by the extracted Argo schema. Generated
-artifacts are local under `.local/`; rerun commands to reproduce the checks.
+upstream CRD objects. Generated artifacts are local under `.local/`; rerun
+commands to reproduce the checks.
 
-Checks not executed for GitOps/serving: Application apply, Argo Synced/Healthy,
-model downloads, real streaming inference, PVC reuse, reconciliation and rollback.
-K3s bootstrap, standalone CUDA computation and Kubernetes GPU allocation are
-observed above; pod-replacement storage and reboot survival are verified, but all
-GitOps/serving runtime results remain pending.
+Live results, 2026-10-17 18:51 UTC through 2026-10-18 04:42 UTC (full detail in
+`docs/versions.md`): Argo CD v3.5.5 installed from the reviewed render at merged
+`21cd1c6` (PR #11) and ready; initial admin credentials rotated with the
+initial-password Secret deleted after verified replacement login; root synced
+once at `21cd1c6` (no prune) registering the inference AppProject and the vllm
+child; the first child sync downloaded ~3.80 GiB of weights and then exposed the
+`VLLM_PORT` service-discovery crash (fixed by merged PR #13, `e2b9b8f`); the
+re-sync produced a Ready pod in 71 s with zero restarts, Argo Synced/Healthy at
+the reviewed SHA; the real streaming smoke test passed twice (SSE, incremental
+content before completion, no server error, `[DONE]`; first content 0.135/0.189
+s, end-to-end 0.483/0.482 s as smoke observations); GPU 19,082 MiB of 24,576 MiB
+idle with the model loaded; and the owner-approved pod-replacement proof showed
+byte-identical model cache (no re-download), unchanged PVC/PV identity with
+Retain, and a passing smoke test on the replacement pod.
 
-Next concrete action: finish milestone 0 hardware gates before any child Application
-sync; GitOps preparation is already merged. llm-d, sharing, and LMCache are deferred.
+Checks not executed for GitOps/serving: formal rollback/reconciliation proof,
+concurrency or load testing, benchmark measurements, and reboot survival of the
+serving workload. K3s bootstrap, standalone CUDA computation, Kubernetes GPU
+allocation, pod-replacement storage and reboot survival are verified under
+issues #4–#5.
 
-## Runtime milestones — not verified
+Next concrete action: closeout of issue #6 after this evidence merge. llm-d,
+sharing, and LMCache remain deferred.
 
-1. One real vLLM replica: pinned runtime/model, persistent weights, probes,
-   bounded shared memory, private Service, real streaming smoke test.
+## Runtime milestones
+
+1. ~~One real vLLM replica: pinned runtime/model, persistent weights, probes,
+   bounded shared memory, private Service, real streaming smoke test.~~
+   **Verified under issue #6** — see the observed section above and
+   `docs/versions.md` for evidence and limitations.
 2. GitOps: Argo CD, declared desired state, readiness ordering, schema/render
    checks, reconciliation/rollback proof, persistent-data retention guidance.
 3. Two real replicas on one shared GPU: separate output verification, stable
