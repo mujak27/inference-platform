@@ -4,6 +4,9 @@ Issue #6 verified bootstrap and real streaming inference, and issue #7 verified 
 manual Git change/revert, storage-preserving stop/start and quiescent SQLite/token
 backup; see
 [observed versions and evidence](versions.md#observed-rollback-stopstart-and-sqlite-backup--issue-7-2026-10-18).
+The approved bounded llm-d MVP (CRD admission, manual child sync and one routed
+real-backend SSE) was subsequently observed under issues #15/#19; see the
+[llm-d evidence](versions.md#real-llm-d-mvp-execution--issues-1519-2026-10-18).
 The bootstrap commands below are first-install instructions, not commands to
 rerun on the working cluster. Each future operation still needs its own approval;
 full K3s restore remains untested.
@@ -215,9 +218,11 @@ and the JSON summary reports `routed` and `server`. That header is EPP's
 response-path signal only; full real-backend attribution also correlates the
 request in the live `vllm` pod (`kubectl -n inference logs` / `/metrics`). The
 Service stays ClusterIP;
-the port-forward is the only access path. Live `InferencePool` admission, the
-`llmd` Argo sync and routed SSE against the real backend are **pending live
-execution** — the local render, policy and schema checks do not substitute for them.
+the port-forward is the only access path. Live `InferencePool` admission, manual
+`llmd` sync and one routed SSE against the real backend have been observed under
+issues #15/#19 (version record above). This does not establish general
+interoperability, cache metrics, failure/cancellation behavior, multi-engine
+routing, load or HA.
 
 ## Change, rollback, and cleanup
 

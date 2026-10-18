@@ -31,6 +31,19 @@ settings (`MAX_NUM_SEQS=4`, `replicas=1`).
 
 ## Approval and private access
 
+### DHCP address drift — observed recovery note
+
+On 2026-10-18, DHCP address drift left K3s `advertise-address`/`node-ip` and the
+pod-to-API firewall destination stale. Under explicit approval, these were aligned
+to the current host address and K3s was restarted normally; API access and node
+readiness recovered. Keep the API endpoint, node advertise address and pod-to-API
+firewall destination aligned after address changes. Do not change interfaces or
+DHCP behavior automatically, broaden firewall access, or bypass host-key/TLS
+trust. Any backup and controlled restart require explicit approval. Stable host
+addressing remains an operational limitation; metrics-server was still unavailable
+after this repair and its previous node address was unchanged, so metrics are not
+qualified.
+
 Before acting, obtain owner approval for the exact merged source/sync SHAs,
 change and revert interruptions, separate zero/one outage and return path, and
 any privileged backup access. K3s stop/start windows, credential-bearing host
