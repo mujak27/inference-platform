@@ -24,12 +24,29 @@ jobs:
           curl -fsSL https://github.com/yannh/kubeconform/releases/download/v0.8.0/kubeconform-linux-amd64.tar.gz -o .local/tools/kubeconform.tar.gz
           echo '9bc2bffbf71f261128533edaf912153948b7ff238f9a531ae6d34466ec287883  .local/tools/kubeconform.tar.gz' | sha256sum --check
           tar -xzf .local/tools/kubeconform.tar.gz -C .local/tools kubeconform
+          curl -fsSL https://get.helm.sh/helm-v4.3.1-linux-amd64.tar.gz -o .local/tools/helm.tar.gz
+          # Official https://get.helm.sh/helm-v4.3.1-linux-amd64.tar.gz.sha256sum
+          echo '0403a88ae20913d11b10a2467b50087721fea7581736da6b9d3992f5357fe54b  .local/tools/helm.tar.gz' | sha256sum --check
+          tar -xzf .local/tools/helm.tar.gz -C .local/tools --strip-components=1 linux-amd64/helm
           chmod +x .local/tools/kubectl
           echo "$PWD/.local/tools" >> "$GITHUB_PATH"
           python3 -m pip install -r requirements-dev.txt
+      - name: Acquire pinned source artifacts and rerender both required candidates
+        run: |
+          set -euo pipefail
+          mkdir -p .local/llmd
+          helm pull oci://ghcr.io/llm-d/charts/llm-d-router-standalone --version v0.11.0 --destination .local/llmd
+          echo 'd5d94816d4075d56028d937e2134d66bc561b2d752259b18f01084b4d7f1602b  .local/llmd/llm-d-router-standalone-v0.11.0.tgz' | sha256sum --check
+          curl -fsSL https://github.com/kubernetes-sigs/gateway-api-inference-extension/releases/download/v1.5.0/v1-manifests.yaml -o .local/llmd/crds.yaml
+          echo 'cd7cc63149943627f92d401991886a631d938de28edb416312c443a1b7f42ded  .local/llmd/crds.yaml' | sha256sum --check
+          bash scripts/render-llmd.sh
+          bash scripts/render-llmd-sim.sh
       - name: Syntax, unit tests, and manifest schemas (no cluster access)
         run: |
-          bash -n scripts/preflight.sh scripts/validate-manifests.sh
+          bash -n scripts/preflight.sh scripts/validate-manifests.sh scripts/validate-cuda.sh scripts/render-llmd.sh scripts/render-llmd-sim.sh
           python3 -m unittest discover -s tests -v
           bash scripts/validate-manifests.sh
+          python3 scripts/validate-llmd.py --candidate real
+          python3 scripts/validate-llmd.py --candidate sim
+          # Source/schema gates only: no EPP/Envoy image execution or runtime claim.
           git diff --check

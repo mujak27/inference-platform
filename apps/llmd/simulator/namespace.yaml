@@ -1,0 +1,5 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: llmd-sim
+  labels: {inference.platform/experiment: synthetic-only}

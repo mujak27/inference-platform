@@ -1,0 +1,37 @@
+# Reviewed from uncommitted llmd-next preparation (base d0c1608); not registered.
+router:
+  epp:
+    replicas: 1
+    image:
+      registry: ghcr.io/llm-d
+      repository: llm-d-router-endpoint-picker
+      tag: v0.11.0@sha256:39257d24552d16d8f215d3de25cc734fd44af3b282b67032db01aff900c610cf
+      pullPolicy: IfNotPresent
+    pluginsConfigFile: default-plugins.yaml
+    metricsDataSource: {scheme: http, path: /metrics}
+    resources:
+      requests: {cpu: "1", memory: 1Gi}
+      limits: {cpu: "2", memory: 2Gi}
+  proxy:
+    enabled: true
+    proxyType: envoy
+    mode: sidecar
+    failOpen: false
+    # Evaluation override: upstream 1.33.2 is EOL; runtime qualification pending.
+    image: docker.io/envoyproxy/envoy:distroless-v1.37.8@sha256:036ffe3333bd35828fd229d79cb5f2216082bd8a9732cff69db0413d96ae0150
+    resources:
+      requests: {cpu: "1", memory: 512Mi}
+      limits: {cpu: "2", memory: 1Gi}
+    args: [--service-node, envoy-proxy, --log-level, warn, --concurrency, "2", --drain-strategy, immediate, --drain-time-s, "60", -c, /etc/envoy/envoy.yaml]
+  inferencePool: {create: true, failureMode: FailClose}
+  modelServers:
+    type: vllm
+    protocol: http
+    matchLabels: {app.kubernetes.io/name: vllm}
+    targetPorts: [{number: 8000}]
+  extraServicePorts: [{name: http, port: 80, protocol: TCP, targetPort: 8081}]
+  monitoring:
+    prometheus: {enabled: false}
+  tracing: {enabled: false}
+  tokenizer: {enabled: false}
+  latencyPredictor: {enabled: false}
