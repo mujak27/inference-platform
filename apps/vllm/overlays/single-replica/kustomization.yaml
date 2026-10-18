@@ -4,7 +4,7 @@ resources:
   - ../../base
 replicas:
   - name: vllm
-    count: 0
+    count: 1
 patches:
   - target:
       kind: Deployment
