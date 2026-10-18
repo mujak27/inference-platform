@@ -276,3 +276,42 @@ class StreamTests(unittest.TestCase):
                                  '--timeout', '0.5'], text=True, capture_output=True)
         self.assertNotEqual(result.returncode, 0)
         self.assertLess(time.monotonic() - started, 0.8)
+
+    def test_smoke_total_timeout_covers_trickling_partial_line(self):
+        class Handler(http.server.BaseHTTPRequestHandler):
+            def do_POST(self):
+                self.send_response(200)
+                self.send_header("Content-Type", "text/event-stream")
+                self.end_headers()
+                for byte in b'data: {"choices": [{"delta": {"content": "ok"}}]}\n':
+                    try:
+                        self.wfile.write(bytes([byte]))
+                        self.wfile.flush()
+                        time.sleep(0.08)
+                    except BrokenPipeError:
+                        return
+
+            def log_message(self, *_):
+                pass
+
+        server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+        self.addCleanup(server.server_close)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        self.addCleanup(server.shutdown)
+        started = time.monotonic()
+        result = subprocess.run([sys.executable, str(ROOT / 'scripts/smoke-test.py'),
+                                 '--base-url', f'http://127.0.0.1:{server.server_port}',
+                                 '--timeout', '0.35'], text=True, capture_output=True)
+        elapsed = time.monotonic() - started
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('total timeout', result.stderr.lower())
+        self.assertLess(elapsed, 0.8)
+
+    def test_smoke_timeout_must_be_positive_and_finite(self):
+        for timeout in ('0', 'nan', 'inf'):
+            with self.subTest(timeout=timeout):
+                result = subprocess.run([sys.executable, str(ROOT / 'scripts/smoke-test.py'),
+                                          '--timeout', timeout], text=True, capture_output=True)
+                self.assertEqual(result.returncode, 2)
+                self.assertIn('positive finite', result.stderr)
