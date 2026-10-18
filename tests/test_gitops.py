@@ -3,6 +3,7 @@ import json
 from pathlib import Path
 import re
 import subprocess
+import tempfile
 import unittest
 
 import yaml
@@ -55,7 +56,7 @@ class GitOpsTests(unittest.TestCase):
 
     def test_single_gpu_no_surge_and_bounded_shared_memory(self):
         deployment = self.resource("Deployment")
-        self.assertEqual(deployment["spec"]["replicas"], 1)
+        self.assert_supported_replicas(deployment)
         self.assertEqual(deployment["spec"]["strategy"]["rollingUpdate"], {"maxSurge": 0, "maxUnavailable": 1})
         pod = deployment["spec"]["template"]["spec"]
         self.assertEqual(pod["runtimeClassName"], "nvidia")
@@ -66,6 +67,29 @@ class GitOpsTests(unittest.TestCase):
         self.assertEqual(shm["emptyDir"], {"medium": "Memory", "sizeLimit": "2Gi"})
         for probe in ("startupProbe", "readinessProbe"):
             self.assertEqual(container[probe]["httpGet"]["path"], "/health")
+
+    def assert_supported_replicas(self, deployment):
+        self.assertIn(deployment["spec"]["replicas"], (0, 1))
+
+    def test_rendered_stop_start_replica_bounds(self):
+        with tempfile.TemporaryDirectory() as directory:
+            (Path(directory) / "workload.yaml").write_text(yaml.safe_dump_all(self.workload))
+            path = Path(directory) / "kustomization.yaml"
+            for count in (0, 1, 2):
+                with self.subTest(replicas=count):
+                    path.write_text(yaml.safe_dump({
+                        "apiVersion": "kustomize.config.k8s.io/v1beta1",
+                        "kind": "Kustomization",
+                        "resources": ["workload.yaml"],
+                        "replicas": [{"name": "vllm", "count": count}],
+                    }))
+                    deployment = next(item for item in render(directory) if item["kind"] == "Deployment")
+                    self.assertEqual(deployment["spec"]["replicas"], count)
+                    if count == 2:
+                        with self.assertRaises(AssertionError):
+                            self.assert_supported_replicas(deployment)
+                    else:
+                        self.assert_supported_replicas(deployment)
 
     def test_serving_candidate_and_parameters(self):
         container = self.resource("Deployment")["spec"]["template"]["spec"]["containers"][0]

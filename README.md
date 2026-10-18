@@ -1,8 +1,9 @@
 # Inference platform
 
 A reproducible, GitOps-managed Kubernetes inference platform, built incrementally
-with vLLM, llm-d, and LMCache. **Status: host preparation; no deployed or measured
-inference yet.**
+with vLLM, llm-d, and LMCache. **Status: one private vLLM replica serving with
+observed streaming output (issue #6); rollback and recovery remain unverified
+(issue #7).** Smoke timings are not benchmarks; llm-d and LMCache remain deferred.
 
 ## Start here
 
@@ -44,13 +45,18 @@ capacity and compatibility validation.
 See [milestones](docs/milestones.md) and the [version/evidence record](docs/versions.md).
 No model weights, credentials, installation images, or raw host inventories belong in Git.
 
-## GitOps preparation
+## GitOps and serving
 
 [GitOps guide](docs/gitops.md): `bootstrap/`, `infra/`, and `apps/` follow the
 [k8s-crossplane layout](https://github.com/mujak27/k8s-crossplane). A pinned Argo CD
-bootstrap and single-replica vLLM candidate can be rendered now. Both Applications
-require manual sync; no cluster/GPU validation is claimed. llm-d and LMCache wait
-until real serving works.
+bootstrap and single-replica vLLM configuration have been deployed and observed.
+Both Applications still require manual sync; merging changes does not authorize
+deployment. See the version/evidence record for host, GPU, storage and serving
+results and their limits. Manual Git rollback, stop/start and backup/recovery
+acceptance remain pending under issue #7.
+
+[Operations and recovery](docs/recovery.md) covers private access, approval-gated
+Git rollback and stop/start, SQLite/token backup, and untested restore preparation.
 
 ## Local checks
 
@@ -67,4 +73,5 @@ are documented in the GitOps guide. No configured cluster is contacted.
 
 Host installation is manual and intentionally does not automate partitioning,
 flashing, reboots, or firewall changes. Container CUDA computation and Kubernetes
-GPU allocation remain separate acceptance gates after host preparation.
+GPU allocation were independently verified before serving; those results do not
+establish rollback or recovery acceptance.
