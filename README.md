@@ -72,6 +72,12 @@ header with a bounded timeout:
 ```sh
 kubectl --kubeconfig "$KUBECONFIG_PRIVATE" --context "$CONTEXT" \
   -n inference port-forward --address 127.0.0.1 svc/llmd-epp 8081:80
+```
+
+Keep that port-forward terminal running. In another terminal, run the bounded
+streaming smoke test:
+
+```sh
 python3 scripts/smoke-test.py --base-url http://127.0.0.1:8081 --require-routed --timeout 30
 ```
 
@@ -110,7 +116,7 @@ and the management computer are operator-specific and are not baked into workloa
 
 ## Serving path
 
-Current:
+Direct backend bypass:
 
 ```text
 Private client → loopback port-forward → vLLM (Qwen3-1.7B)
@@ -137,11 +143,11 @@ No model weights, credentials, installation images, or raw host inventories belo
 ## GitOps deployment
 
 [GitOps guide](docs/gitops.md): `bootstrap/`, `infra/`, and `apps/` follow the
-[k8s-crossplane layout](https://github.com/mujak27/k8s-crossplane). A pinned Argo CD
-bootstrap and single-replica vLLM configuration have been deployed and observed.
-Both Applications still require manual sync without pruning; merging changes does
-not authorize deployment. See the version/evidence record for host, GPU, storage and serving
-results and their limits. Manual Git rollback, stop/start and a quiescent
+[k8s-crossplane layout](https://github.com/mujak27/k8s-crossplane). The pinned Argo CD
+installation, single-replica vLLM application, and single-backend llm-d router have
+been deployed and observed. Applications require manual sync without pruning; merging
+changes does not authorize deployment. See the version/evidence record for host, GPU,
+storage and serving results and their limits. Manual Git rollback, stop/start and a quiescent
 SQLite/token backup were verified under issue #7; full restore remains pending.
 
 [Operations and recovery](docs/recovery.md) covers private access, approval-gated
