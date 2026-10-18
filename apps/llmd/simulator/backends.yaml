@@ -1,0 +1,90 @@
+# Reviewed llmd-next preparation; two independent CPU-only echo backends.
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: synthetic-backend-a, namespace: llmd-sim}
+spec:
+  replicas: 1
+  strategy: {type: Recreate}
+  selector:
+    matchLabels: {app.kubernetes.io/name: llmd-inference-sim, inference.platform/synthetic-backend: a}
+  template:
+    metadata:
+      labels: {app.kubernetes.io/name: llmd-inference-sim, inference.platform/experiment: synthetic-only, inference.platform/synthetic-backend: a}
+    spec:
+      automountServiceAccountToken: false
+      containers:
+        - name: synthetic-simulator
+          image: ghcr.io/llm-d/llm-d-inference-sim:v0.11.2@sha256:32144df791330a0006b747edfdf2b114a0fe728e023a9d1b3463eeb48d32abb9
+          args:
+            - --model=synthetic-llmd-sim-only
+            - --mode=echo
+            - --port=8000
+            - --max-num-seqs=2
+            - --max-waiting-queue-length=16
+            - --max-model-len=1024
+            - --latency-calculator=constant
+            - --time-to-first-token=100ms
+            - --inter-token-latency=20ms
+            - --enable-request-id-headers
+            - '--fake-metrics={"running-requests":0,"waiting-requests":0,"kv-cache-usage":0}'
+          env:
+            - {name: POD_NAME, valueFrom: {fieldRef: {fieldPath: metadata.name}}}
+            - {name: POD_NAMESPACE, valueFrom: {fieldRef: {fieldPath: metadata.namespace}}}
+            - {name: POD_IP, valueFrom: {fieldRef: {fieldPath: status.podIP}}}
+          ports: [{name: http, containerPort: 8000}]
+          readinessProbe: {httpGet: {path: /health/ready, port: http}, periodSeconds: 2}
+          livenessProbe: {httpGet: {path: /health, port: http}, periodSeconds: 10}
+          resources:
+            requests: {cpu: 100m, memory: 64Mi}
+            limits: {cpu: 500m, memory: 256Mi}
+          securityContext:
+            runAsNonRoot: true
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: {drop: [ALL]}
+            seccompProfile: {type: RuntimeDefault}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: synthetic-backend-b, namespace: llmd-sim}
+spec:
+  replicas: 1
+  strategy: {type: Recreate}
+  selector:
+    matchLabels: {app.kubernetes.io/name: llmd-inference-sim, inference.platform/synthetic-backend: b}
+  template:
+    metadata:
+      labels: {app.kubernetes.io/name: llmd-inference-sim, inference.platform/experiment: synthetic-only, inference.platform/synthetic-backend: b}
+    spec:
+      automountServiceAccountToken: false
+      containers:
+        - name: synthetic-simulator
+          image: ghcr.io/llm-d/llm-d-inference-sim:v0.11.2@sha256:32144df791330a0006b747edfdf2b114a0fe728e023a9d1b3463eeb48d32abb9
+          args:
+            - --model=synthetic-llmd-sim-only
+            - --mode=echo
+            - --port=8000
+            - --max-num-seqs=2
+            - --max-waiting-queue-length=16
+            - --max-model-len=1024
+            - --latency-calculator=constant
+            - --time-to-first-token=100ms
+            - --inter-token-latency=20ms
+            - --enable-request-id-headers
+            - '--fake-metrics={"running-requests":0,"waiting-requests":0,"kv-cache-usage":0}'
+          env:
+            - {name: POD_NAME, valueFrom: {fieldRef: {fieldPath: metadata.name}}}
+            - {name: POD_NAMESPACE, valueFrom: {fieldRef: {fieldPath: metadata.namespace}}}
+            - {name: POD_IP, valueFrom: {fieldRef: {fieldPath: status.podIP}}}
+          ports: [{name: http, containerPort: 8000}]
+          readinessProbe: {httpGet: {path: /health/ready, port: http}, periodSeconds: 2}
+          livenessProbe: {httpGet: {path: /health, port: http}, periodSeconds: 10}
+          resources:
+            requests: {cpu: 100m, memory: 64Mi}
+            limits: {cpu: 500m, memory: 256Mi}
+          securityContext:
+            runAsNonRoot: true
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: {drop: [ALL]}
+            seccompProfile: {type: RuntimeDefault}

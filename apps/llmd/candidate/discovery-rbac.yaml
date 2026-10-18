@@ -1,0 +1,17 @@
+# Local render replaces chart discovery RBAC with this explicit namespaced scope.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata: {name: llmd-discovery, namespace: inference}
+rules:
+  - apiGroups: [""]
+    resources: [pods]
+    verbs: [get, list, watch]
+  - apiGroups: [inference.networking.k8s.io]
+    resources: [inferencepools]
+    verbs: [get, list, watch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata: {name: llmd-discovery, namespace: inference}
+subjects: [{kind: ServiceAccount, name: llmd-epp, namespace: inference}]
+roleRef: {apiGroup: rbac.authorization.k8s.io, kind: Role, name: llmd-discovery}

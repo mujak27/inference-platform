@@ -52,13 +52,22 @@ bootstrap and single-replica vLLM candidate can be rendered now. Both Applicatio
 require manual sync; no cluster/GPU validation is claimed. llm-d and LMCache wait
 until real serving works.
 
+[llm-d qualification sources](docs/llmd-preparation.md) and the separate
+[CPU-only simulator](docs/llmd-simulator.md) remain unregistered. Source checks
+do not establish pinned EPP/Envoy acceptance or runtime compatibility.
+
 ## Local checks
 
 ```sh
 python3 -m pip install -r requirements-dev.txt
 bash -n scripts/preflight.sh scripts/validate-manifests.sh scripts/validate-cuda.sh
+# First acquire the approved source artifacts separately; see llm-d qualification.
+bash scripts/render-llmd.sh
+bash scripts/render-llmd-sim.sh
 python3 -m unittest discover -s tests -v
 bash scripts/validate-manifests.sh
+python3 scripts/validate-llmd.py --candidate real
+python3 scripts/validate-llmd.py --candidate sim
 git diff --check
 ```
 

@@ -1,5 +1,45 @@
 # Version and evidence record
 
+## llm-d issue #16 — source-only qualification slice, 2026-10-18
+
+Fixed base `8eb55b437994afee49e79335617f602e9cc47d44`; reviewed preparation from
+uncommitted `llmd-next` at `d0c1608d7e8641f6391514525b88650afc7b1697` without
+modifying that worktree. [Provenance, pins and compatibility/evidence matrix](llmd-preparation.md).
+No active registration, cluster/host operation, image execution or chart download
+was performed. The owner subsequently approved local kubeconform installation
+and schema execution; no broader candidate-runtime authorization was inferred.
+
+- Fresh offline real and synthetic renders passed using the previously cached,
+  independently checksum-reverified chart and installed Helm/Kustomize. New
+  generated outputs are ignored, not committed proof. Real discovery RBAC is
+  explicitly narrowed to namespaced Pod and GA InferencePool get/list/watch;
+  simulator remains Pod-only. Proven vLLM 0.31.0 is unchanged.
+- `LLMD_CHART=<approved-cached-chart> python3 -B -m unittest discover -s tests -v`:
+  **35 tests passed, no skips** (23 unchanged baseline + 12 public CLI tests).
+  Actual red→green checks covered absent inputs, real rendering/RBAC, supplied
+  policy checks, stale output, required missing schema, selector overlap,
+  scheduler-disable overrides and model-download arguments. Additional negative
+  controls cover GPU/PVC, namespace/discovery crossover, public exposure and writes.
+- Shell syntax checks for the three existing scripts and two new render wrappers,
+  plus `git diff --check`, passed. Source tests used Python 3.9.6/PyYAML 6.0.3 on
+  Darwin arm64; they do not execute EPP, Envoy or the simulator.
+- Initial required validator commands failed because kubeconform was absent.
+  After explicit approval, installed kubeconform 0.8.0 under `.local/tools` from
+  the official Darwin arm64 archive, SHA256
+  `f84f4dfbebf4a6b0b230385fa065a39ea35e02608c2b50d025dcf64775a69d67`,
+  verified against upstream CHECKSUMS. Both full candidate commands then passed:
+  real **8 valid**, simulator **10 valid**, no invalid/errors/skips. Their schema
+  negative controls also passed. Real validation used the checksum-pinned cached
+  GAIE CRD asset. Baseline `validate-manifests.sh` passed: **71 valid**, no invalid
+  or errors, **3 CRDs intentionally skipped** by its existing policy.
+  CI now declares pinned source acquisition, rerenders both candidates and
+  requires their full source/schema checks. It was not run remotely.
+- Pinned EPP/Envoy config acceptance,
+  signature/SBOM/advisory disposition, admission, target amd64, ext_proc,
+  telemetry and routed SSE remain **pending**. Historical arm64 Envoy validation
+  is attributed separately, not repeated or upgraded to fresh runtime evidence.
+  This does not complete #16 or unblock #17; #7 retains all host work.
+
 Documentation research and host inspection dates: **2026-10-17–18**. Private SSH
 inventory and approved host-baseline changes have been verified. No runtime
 combination is claimed supported end-to-end by this project yet.
