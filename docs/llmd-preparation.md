@@ -78,11 +78,27 @@ zero config; other configurations start renderer warmup) producers, so factory
 side effects require bounded input and network isolation. YAML equality with a
 fixture is not this evidence.
 
-## Envoy validation seam — proposed, not executed
+### Harness built and executed, 2026-10-18
+
+With separate owner approval, a disposable in-tree test harness (`cmd/epp/runner/rendered_config_harness_test.go`, `TestRenderedEPPConfigRegistryValidation`) was built against pinned upstream `llm-d/llm-d-router` commit `a5cbe600ebade00cf3e9885beaf2bfacddeabce1` (archive SHA-256 `3638d955ea55bb689ec560a7769180f4e332a78be2a11eb2bbc3d3e50169ef2f`) using `go1.27.1 darwin/arm64` (`GOTOOLCHAIN=local`; `go.mod` requires Go `1.26.6`) and checksum-verified module caches. Modelled on upstream `TestFlowControlFeatureGateAdmissionControlWiring`, the harness runs production phase one (`Options` / `loader.LoadRawConfig`) → in-memory datastore (no cluster client) → production phase two (`loader.InstantiateAndConfigure`, scheduler profile build, data-layer configuration) → `ValidatePluginStability` (`allowExperimentalPlugins=false`), halting before manager creation, data-layer `Start`, admission control and serving. Each run executed in an empty directory under `sandbox-exec -p '(version 1) (allow default) (deny network*)'` with `GOMEMLIMIT=512MiB`; network denial was verified with a Go positive control, and post-run checks confirmed zero files written and zero residual plugin goroutines.
+
+Config bytes were extracted programmatically from the rendered manifests (`epp` container `--config-file` → `volumeMount` → `ConfigMap` key → `data[key]`):
+
+- **Real candidate (`PASS`):** SHA-256 `0d4608376ea93b8d495c9bc5fe53c49fd568e3ef75c9cf3c1fb6b7bede944632` (488 B) — 17 plugins instantiated (`anthropic-parser`, `approx-prefix-cache-producer`, `core-metrics-extractor`, `fcfs-ordering-policy`, `global-strict-fairness-policy`, `kv-cache-utilization-scorer`, `max-score-picker`, `metrics-data-source`, `openai-parser`, `passthrough-parser`, `prefix-cache-scorer`, `queue-scorer`, `single-profile-handler`, `static-usage-limit-policy`, `token-producer`, `utilization-detector`, `vllmhttp-parser`), 1 scheduler profile, 1 data source, stability check passed.
+- **Simulator candidate (`PASS`):** SHA-256 `55a40e16a3a8930d89e1711309f26d75041e337ea1d19d994a2160250cc4c913` (285 B) — 13 plugins instantiated (omits `approx-prefix-cache-producer`, `kv-cache-utilization-scorer`, `prefix-cache-scorer` and `token-producer`), 1 scheduler profile, 1 data source, stability check passed.
+- **Discriminating negative controls (all `FAIL`, exit 1 in phase two):**
+  - Unknown plugin type (`f710f598e18cdcd772aff9669d76ac068128ca5f38ad09250c573e198f0fe537`, 529 B) → `configuration validation failed: plugin type 'llmd-harness-unknown-plugin-type' is not registered`
+  - Invalid plugin parameter (`e856abd380458da8ad4122a6a43e2065dc897a6e421e1b092163b489aebdc9c2`, 521 B) → `plugin instantiation failed: failed to create plugin 'metrics-data-source' (type: metrics-data-source): json: unknown field "llmdHarnessBogusParameter"`
+  - Dangling profile reference (`482cd36cad966cdfb3783a7d55a3360ab9711a5a4fb93fe7451e3957108dd7c7`, 535 B) → `scheduling profile validation failed: schedulingProfiles[default] references undefined plugin 'llmd-harness-nonexistent-plugin'`
+
+**Evidence boundary.** This proves upstream v0.11.0 phase-one/phase-two registry, parameter, profile and stability acceptance of the exact rendered ConfigMap bytes on `darwin/arm64`. It is **not** execution of the published `linux/amd64` EPP container image, Envoy bootstrap validation, Kubernetes/CRD admission, `ext_proc` wire interoperability, telemetry scraping or routed SSE.
+
+## Envoy validation seam — executed on linux/arm64, 2026-10-18
 
 Envoy `--mode validate` performs filesystem-only validation with no network
-traffic and no hot restart. A proposed isolated invocation is recorded here for
-approval, not execution:
+traffic and no hot restart. With separate owner approval, the isolated
+invocation below was executed against the pinned digest on `linux/arm64`
+(`envoy --version`: `0d8b9e0b10c695f364118179619918ccb382f34b/1.37.8/Clean/RELEASE/BoringSSL`):
 
 ```sh
 docker run --rm --pull=never --platform=linux/<arch> \
@@ -97,61 +113,31 @@ docker run --rm --pull=never --platform=linux/<arch> \
 
 Validate the exact rendered bytes. Do not use `envsubst`, fabricated addresses
 or `--config-yaml` to make validation pass; the pinned preset renders host/TLS
-values through Helm and invokes Envoy directly. `linux/arm64` execution is not
-target amd64 proof. Validation does not prove DNS, TLS handshakes, discovery,
-ext_proc interoperability or SSE.
+values through Helm and invokes Envoy directly.
 
-## Pinned EPP configuration acceptance — no supported dry-run seam
+- **Exact rendered bootstrap bytes (`PASS`, exit 0):** Programmatic extraction
+  (`envoy-proxy` container `-c /etc/envoy/envoy.yaml` → `volumeMount` →
+  `ConfigMap envoy.data["envoy.yaml"]`) produced byte-identical `8,309 B`
+  configs (SHA-256 `bd7d0590f94929a14e78bd16154e2cf857e5ddc8bc075948251b6b1051dd9613`)
+  for both candidates. Both `--service-node envoy-proxy` (`real`) and
+  `--service-node synthetic-llmd-sim-proxy` (`sim`) exited `0` with
+  `configuration '/etc/envoy/envoy.yaml' OK`.
+- **Discriminating negative controls (all `FAIL`, exit 1):**
+  - Unknown field (`15b31cc2416ff63395a6999c4ce91a51a538c5c25ccc4e6a41abe57ceaa2b58d`, 8,348 B) → `no such field: 'llmd_envoy_harness_bogus_field') has unknown fields`
+  - Out-of-range port (`50e72afbce8595a0ec2ea7d2704e95aef48705ff89682d70d43a85bf3f67db29`, 8,309 B) → `SocketAddressValidationError.PortValue: value must be less than or equal to 65535`
+  - Dangling route cluster (`09bbcb9730c8ed6cd14e218a1c4b5c5a1f16625c90dfff642a9bc8af5712416a`, 8,319 B) → `route: unknown cluster 'llmd-envoy-harness-nonexistent-cluster'`
+  - Invalid `ext_proc` enum (`b506acf0059b9da9325f2e0e6e97e0d9305524c0556fb251af6ab6b8bce14e1d`, 8,312 B) → `unknown enum value: 'LLMD_HARNESS_BOGUS_MODE'`
+- **Documented `--mode validate` blind spot:** Mutating
+  `ext_proc.grpc_service.envoy_grpc.cluster_name` to a nonexistent cluster
+  (`092a755079f0e126751c370c308c30c7d518061fbcc8cb4e2e021008958bff78`, 8,339 B)
+  still exits `0` under `--mode validate`, because Envoy does not resolve
+  `envoy_grpc.cluster_name` against `static_resources.clusters` during static
+  validation. `scripts/validate-llmd.py` enforces that cluster cross-reference
+  statically; live gRPC `ext_proc` connection handling remains a runtime gate.
 
-Upstream EPP v0.11.0 (commit `a5cbe600ebade00cf3e9885beaf2bfacddeabce1`) exposes
-no `--validate`, `--dry-run` or equivalent CLI mode. `Options.AddFlags` accepts
-configuration inputs; `Runner.Run` parses, then requires Kubernetes
-configuration or starts file-discovery serving — file discovery is not a dry
-run, and a missing-kubeconfig failure happens before phase-two plugin
-validation.
-
-- `loader.LoadRawConfig` performs strict structural parsing only; it does not
-  instantiate plugins. Unknown plugin types survive this phase.
-- `loader.InstantiateAndConfigure` performs genuine registry/factory
-  validation: registered types, duplicate names, strict parameter decoding,
-  system defaults and reference checks. It uses unexported production
-  registration and does not perform all production phase-two work.
-- Compile-only builds (`go build`, `go test -c`) prove compilation, not
-  configuration acceptance. Upstream unit targets build a builder image;
-  “hermetic” integration tests acquire envtest binaries. Neither is a
-  validated acceptance of our mounted files.
-
-Any acceptance of the mounted EPP ConfigMap requires a new, separately
-approved harness using upstream internals with the exact pinned toolchain
-(`go.mod` requires Go 1.26.6), network disabled, no credentials/model files,
-bounded resources, and negative controls. Production phase two auto-creates
-approximate-prefix (cleanup goroutine) and tokenizer (local estimation with
-zero config; other configurations start renderer warmup) producers, so factory
-side effects require bounded input and network isolation. YAML equality with a
-fixture is not this evidence.
-
-## Envoy validation seam — proposed, not executed
-
-Envoy `--mode validate` performs filesystem-only validation with no network
-traffic and no hot restart. A proposed isolated invocation is recorded here for
-approval, not execution:
-
-```sh
-docker run --rm --pull=never --platform=linux/<arch> \
-  --network=none --read-only --cap-drop=ALL --security-opt=no-new-privileges \
-  --user=65532:65532 --cpus=1 --memory=512m --pids-limit=64 \
-  --mount "type=bind,src=${BOOTSTRAP},dst=/etc/envoy/envoy.yaml,readonly" \
-  --entrypoint /usr/local/bin/envoy \
-  docker.io/envoyproxy/envoy:distroless-v1.37.8@sha256:036ffe3333bd35828fd229d79cb5f2216082bd8a9732cff69db0413d96ae0150 \
-  --mode validate -c /etc/envoy/envoy.yaml \
-  --service-node <rendered service-node> --concurrency 1 --log-level warn
-```
-
-Validate the exact rendered bytes. Do not use `envsubst`, fabricated addresses
-or `--config-yaml` to make validation pass; the pinned preset renders host/TLS
-values through Helm and invokes Envoy directly. `linux/arm64` execution is not
-target amd64 proof. Validation does not prove DNS, TLS handshakes, discovery,
-ext_proc interoperability or SSE.
+**Evidence boundary.** `linux/arm64` execution is not target `linux/amd64`
+proof. Validation does not prove DNS, TLS handshakes, discovery, `ext_proc`
+wire interoperability or SSE.
 
 ## Reproduce source checks
 
@@ -263,9 +249,9 @@ constitute explicit risk acceptance, which remains an owner decision.
 | Pinned chart/image metadata, amd64 variants | Reported verified by coordinating source research, 2026-10-18; no image execution |
 | Cached chart checksum/source inspection | Fresh local pass; not publisher signature verification |
 | Fresh local render and public source-policy controls | Source-only checks; see execution results in coordinating handoff |
-| Earlier Envoy bootstrap acceptance | Historical native Linux arm64 Docker checks in prior preparation; not rerun, not amd64 proof |
+| Earlier Envoy bootstrap acceptance | Superseded by the fresh 2026-10-18 isolated `linux/arm64` `--mode validate` run below; still not target `linux/amd64` proof |
 | Fresh full candidate schema suite | Passed locally with approved checksum-verified kubeconform 0.8.0: real 8 valid, simulator 10 valid, negative controls passed; CI green on PR #29; suite re-verified on merged base |
-| Actual mounted Envoy/EPP config acceptance | PENDING. No upstream dry-run seam exists; `--mode validate` invocation and EPP harness recorded above require separately approved execution scope |
+| Actual mounted Envoy/EPP config acceptance | **VALIDATED locally (`darwin/arm64` EPP + `linux/arm64` Envoy); target `linux/amd64` and runtime gates PENDING.** Exact rendered EPP ConfigMap bytes (`real` 488 B, 17 plugins; `sim` 285 B, 13 plugins) passed upstream `a5cbe60` phase-one/phase-two registry, parameter, profile and stability validation under network-denied `sandbox-exec` on `darwin/arm64` (3 negative controls rejected). Exact rendered Envoy bootstrap bytes (`bd7d0590…`, 8,309 B, `--service-node envoy-proxy` and `synthetic-llmd-sim-proxy`) passed isolated `--mode validate` on pinned `envoy:distroless-v1.37.8@sha256:036ffe33…` (`linux/arm64`, 4 negative controls rejected; `envoy_grpc.cluster_name` resolution is a documented `--mode validate` blind spot covered statically by `validate-llmd.py`). Target `linux/amd64` execution, published EPP container execution and runtime gates remain **PENDING** |
 | K3s 1.35.9 / GAIE 1.5.0 admission and discovery | PENDING separately approved API/controller verification; Helm 1.35 capabilities are not admission |
 | Target Linux amd64 interoperability | PENDING, including TLS/ext_proc/health behavior |
 | vLLM 0.31.0 vs released llm-d vLLM 0.30.0 | Preserve proven 0.31.0; compatibility pending, no silent downgrade (older baseline has fixed-vulnerability concerns) |
