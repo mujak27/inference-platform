@@ -14,6 +14,7 @@ This follows the directory conventions of
 ```text
 bootstrap/
   argocd/                  pinned Argo CD installation and namespace
+  llmd/crds.yaml           pinned GAIE v1.5.0 InferencePool CRD (applied separately)
   root-app.yaml            manual root Application → infra/
 infra/
   kustomization.yaml       project policy and child Application registry
@@ -23,6 +24,11 @@ apps/
   vllm/
     application.yaml       manual child Application → single-replica overlay
     base/                  workload, model PVC, configuration, private Service
+    overlays/single-replica/
+  llmd/
+    application.yaml       manual child Application → single-replica overlay
+    base/                  committed chart render (router, pool, discovery RBAC)
+    candidate/             render inputs (values, minimal discovery RBAC)
     overlays/single-replica/
 ```
 
@@ -40,6 +46,15 @@ No existing cluster is contacted by validation commands.
 - Root and vLLM Applications point at this public repository's `main` branch.
   Neither has auto-sync or cascading deletion enabled. Merging this PR does not
   install Argo CD, consume a GPU, or change a cluster.
+- The `llmd` child Application (`apps/llmd/application.yaml`) is registered in the
+  same registry, also manual, non-cascading and pinned to `main`, and points at
+  `apps/llmd/overlays/single-replica`. Its overlay only pins
+  `replicas: 1` for `llmd-epp`; the render itself lives in the committed
+  `apps/llmd/base/rendered.yaml`. The pool API is `inference.networking.k8s.io/v1`,
+  so the pinned GAIE **v1.5.0** CRD in `bootstrap/llmd/crds.yaml` must be installed
+  by an operator, separately from this repository sync:
+  `kubectl apply --server-side -f bootstrap/llmd/crds.yaml`. It is not a child
+  Application resource and nothing in the local checks contacts a cluster.
 - An inference AppProject permits only this source repository, the `inference`
   destination namespace, Namespace creation, and the workload's required kinds.
   The root uses the built-in `default` project and is an administrative entry
@@ -91,12 +106,18 @@ static validation baseline, not a selected/verified cluster version. Select the
 host cluster separately and update the baseline if necessary.
 
 Application and AppProject schemas are extracted from the **same pinned Argo CD
-CRDs** used for bootstrap. Missing schemas are errors. The three upstream CRD
-objects themselves are explicitly skipped by kubeconform because the Kubernetes
-schema set does not include a CRD-object schema; they are parsed for extraction,
-not claimed API-server validated. CI also checks manual sync, storage retention,
-image/model pins, config references, private access, probes, and zero-surge rollout.
-Generated YAML/schema files remain ignored under `.local/`.
+CRDs** used for bootstrap, and the `InferencePool` schema is extracted from the
+committed **`bootstrap/llmd/crds.yaml`**. Missing schemas are errors. The three
+upstream Argo CD CRD objects themselves are explicitly skipped by kubeconform
+because the Kubernetes schema set does not include a CRD-object schema; they are
+parsed for extraction, not claimed API-server validated. CI also checks manual
+sync, storage retention, image/model pins, config references, private access,
+probes, and zero-surge rollout. Generated YAML/schema files remain ignored under
+`.local/`.
+
+`python3 scripts/validate-llmd.py --candidate real` additionally re-renders the
+pinned chart and fails if the committed `apps/llmd/base/rendered.yaml` differs, so
+an edited or stale render cannot pass the gate.
 
 ## Before any deployment
 
@@ -116,6 +137,11 @@ Generated YAML/schema files remain ignored under `.local/`.
    schedulable consumer; the storage gate uses a disposable CPU-only pod, not vLLM.
 6. Check CPU/RAM/VRAM/storage headroom, idle GPU memory, model download access,
    and writable model-cache ownership. Record actual versions/evidence.
+7. For the llm-d router only: install the pinned GAIE CRD with
+   `kubectl apply --server-side -f bootstrap/llmd/crds.yaml`, wait for
+   `condition=Established` on `crd/inferencepools.inference.networking.k8s.io`,
+   and confirm API-server admission of the rendered `InferencePool`. Local JSON
+   Schema checks are not admission, controller behavior or routing.
 
 ## Manual Argo CD bootstrap (operator only, after the gates above)
 
@@ -146,9 +172,9 @@ initial-password Secret after confirming access. Never save that password in Git
 shell transcripts, or benchmark evidence.
 
 In the UI, manually sync **root without pruning**. It installs the AppProject
-and registers the vLLM Application only. The project has an earlier sync wave,
-but waves are not a replacement for the controller/CRD readiness checks above.
-Do not sync the child until all host gates pass. Then manually sync **vllm
+and registers the vLLM and llm-d router Applications. The project has an earlier
+sync wave, but waves are not a replacement for the controller/CRD readiness checks
+above. Do not sync a child until all host gates pass. Then manually sync **vllm
 without pruning**, inspect events/logs, and wait for readiness:
 
 ```sh
@@ -173,6 +199,25 @@ issue #6; the manual Git change/revert, storage-preserving stop/start and quiesc
 SQLite/token backup were observed under issue #7 (see the
 [version record](versions.md#observed-rollback-stopstart-and-sqlite-backup--issue-7-2026-10-18)).
 Full K3s restore remains untested.
+
+That direct `svc/vllm` forward is unchanged. To exercise the router instead,
+manually sync **llmd without pruning** after the CRD gate, then forward the router
+Service and require the routed-response header under a bounded timeout:
+
+```sh
+kubectl -n inference rollout status deployment/llmd-epp --timeout=600s
+kubectl -n inference port-forward --address 127.0.0.1 svc/llmd-epp 8081:80
+python3 scripts/smoke-test.py --base-url http://127.0.0.1:8081 --require-routed --timeout 30
+```
+
+`--require-routed` fails unless the gateway added `x-went-into-resp-headers: true`,
+and the JSON summary reports `routed` and `server`. That header is EPP's
+response-path signal only; full real-backend attribution also correlates the
+request in the live `vllm` pod (`kubectl -n inference logs` / `/metrics`). The
+Service stays ClusterIP;
+the port-forward is the only access path. Live `InferencePool` admission, the
+`llmd` Argo sync and routed SSE against the real backend are **pending live
+execution** — the local render, policy and schema checks do not substitute for them.
 
 ## Change, rollback, and cleanup
 
@@ -205,6 +250,13 @@ the root alone does not stop inference or uninstall Argo CD. To stop inference
 without losing downloads, commit `replicas: 0` in the overlay, sync the child,
 and retain the Namespace/PVC/PV. Backup or explicit data-destruction approval is
 required before final storage cleanup.
+
+The same stop path applies to the router: commit `count: 1 -> 0` for `llmd-epp`
+in `apps/llmd/overlays/single-replica/kustomization.yaml`, or `git revert` the
+router commit, and manually sync the **llmd** child with `prune=false`. Deleting
+or scaling down `llmd` never touches `vllm` or the `vllm-models` PVC/PV, and the
+`bootstrap/llmd/crds.yaml` CRD is operator-managed administration, not workload
+rollback.
 
 ## Upstream sources reviewed 2026-10-17
 

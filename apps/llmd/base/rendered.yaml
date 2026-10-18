@@ -1,0 +1,374 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: llmd-epp
+  namespace: inference
+  labels:
+    app.kubernetes.io/name: llmd-epp
+    app.kubernetes.io/version: v0.11.0
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: llmd-epp
+  namespace: inference
+data:
+  default-plugins.yaml: "apiVersion: llm-d.ai/v1alpha1\nkind: EndpointPickerConfig\n\
+    plugins:\n- type: queue-scorer\n- type: kv-cache-utilization-scorer\n- type: prefix-cache-scorer\n\
+    - type: metrics-data-source\n  parameters:\n    scheme: \"http\"\n    path: \"\
+    /metrics\"\n    insecureSkipVerify: true\n- type: core-metrics-extractor\nschedulingProfiles:\n\
+    - name: default\n  plugins:\n  - pluginRef: queue-scorer\n    weight: 2\n  - pluginRef:\
+    \ kv-cache-utilization-scorer\n    weight: 2\n  - pluginRef: prefix-cache-scorer\n\
+    \    weight: 3\n"
+  payload-agnostic.yaml: "# Request-format agnostic routing. Use this when the request\
+    \ format is\n# unknown or unsupported, so the EPP cannot rely on scorers that\
+    \ read the\n# request body (e.g. the prefix-cache scorer). The passthrough parser\
+    \ does\n# not parse the body, and routing falls back to backend-state scorers:\n\
+    #   - active-request-scorer  : prefers the least busy endpoint\n#   - session-affinity-scorer:\
+    \ keeps a session pinned to the same endpoint\n# Select it by setting router.epp.pluginsConfigFile:\
+    \ payload-agnostic.yaml\napiVersion: llm-d.ai/v1alpha1\nkind: EndpointPickerConfig\n\
+    plugins:\n- type: passthrough-parser\n- type: active-request-scorer\n- type: session-affinity-scorer\n\
+    requestHandler:\n  parsers:\n  - pluginRef: passthrough-parser\nschedulingProfiles:\n\
+    - name: default\n  plugins:\n  - pluginRef: active-request-scorer\n    weight:\
+    \ 1\n  - pluginRef: session-affinity-scorer\n    weight: 1\n"
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: envoy
+  namespace: inference
+data:
+  envoy.yaml: "admin:\n  address:\n    socket_address:\n      address: 127.0.0.1\n\
+    \      port_value: 19000\n  access_log:\n    - name: envoy.access_loggers.file\n\
+    \      typed_config:\n        \"@type\": type.googleapis.com/envoy.extensions.access_loggers.file.v3.FileAccessLog\n\
+    \        path: /dev/null\nstatic_resources:\n  listeners:\n    - name: envoy-proxy-ready-0.0.0.0-19001\n\
+    \      address:\n        socket_address:\n          address: 0.0.0.0\n       \
+    \   port_value: 19001\n      additional_addresses:\n      - address:\n       \
+    \   socket_address:\n            address: \"::\"\n            port_value: 19001\n\
+    \      filter_chains:\n        - filters:\n            - name: envoy.filters.network.http_connection_manager\n\
+    \              typed_config:\n                \"@type\": type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager\n\
+    \                stat_prefix: envoy-ready-http\n                route_config:\n\
+    \                  name: local_route\n                  virtual_hosts:\n     \
+    \               - name: prometheus_stats\n                      domains: [\"*\"\
+    ]\n                      routes:\n                        - match:\n         \
+    \                   prefix: \"/stats/prometheus\"\n                          route:\n\
+    \                            cluster: \"prometheus_stats\"\n                http_filters:\n\
+    \                  - name: envoy.filters.http.health_check\n                 \
+    \   typed_config:\n                      \"@type\": type.googleapis.com/envoy.extensions.filters.http.health_check.v3.HealthCheck\n\
+    \                      pass_through_mode: false\n                      headers:\n\
+    \                        - name: \":path\"\n                          string_match:\n\
+    \                            exact: \"/ready\"\n                  - name: envoy.filters.http.router\n\
+    \                    typed_config:\n                      \"@type\": type.googleapis.com/envoy.extensions.filters.http.router.v3.Router\n\
+    \    - name: vllm\n      address:\n        socket_address:\n          address:\
+    \ 0.0.0.0\n          port_value: 8081\n      additional_addresses:\n      - address:\n\
+    \          socket_address:\n            address: \"::\"\n            port_value:\
+    \ 8081\n      per_connection_buffer_limit_bytes: 32768\n      access_log:\n  \
+    \      - name: envoy.access_loggers.file\n          filter:\n            response_flag_filter:\n\
+    \              flags: [\"NR\"]\n          typed_config:\n            \"@type\"\
+    : type.googleapis.com/envoy.extensions.access_loggers.file.v3.FileAccessLog\n\
+    \            path: /dev/stdout\n            log_format:\n              text_format_source:\n\
+    \                inline_string: \"{\\\"start_time\\\":\\\"%START_TIME%\\\",\\\"\
+    method\\\":\\\"%REQ(:METHOD)%\\\",...}\\n\"\n      filter_chains:\n        - name:\
+    \ vllm\n          filters:\n            - name: envoy.filters.network.http_connection_manager\n\
+    \              typed_config:\n                \"@type\": type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager\n\
+    \                stat_prefix: http-8081\n                route_config:\n     \
+    \             name: vllm\n                  virtual_hosts:\n                 \
+    \   - name: vllm-default\n                      domains: [\"*\"]\n           \
+    \           routes:\n                        - match:\n                      \
+    \      prefix: \"/\"\n                          route:\n                     \
+    \       cluster: original_destination_cluster\n                            timeout:\
+    \ 86400s\n                            idle_timeout: 86400s\n                 \
+    \           upgrade_configs:\n                              - upgrade_type: websocket\n\
+    \                          typed_per_filter_config:\n                        \
+    \    envoy.filters.http.ext_proc:\n                              \"@type\": type.googleapis.com/envoy.config.route.v3.FilterConfig\n\
+    \                              config: {}\n                http_filters:\n   \
+    \               - name: envoy.filters.http.ext_proc\n                    typed_config:\n\
+    \                      \"@type\": type.googleapis.com/envoy.extensions.filters.http.ext_proc.v3.ExternalProcessor\n\
+    \                      failure_mode_allow: false\n                      grpc_service:\n\
+    \                        envoy_grpc:\n                          cluster_name:\
+    \ ext_proc\n                          authority: localhost:9002\n            \
+    \            timeout: 10s\n                      processing_mode:\n          \
+    \              request_header_mode: SEND\n                        response_header_mode:\
+    \ SEND\n                        request_body_mode: FULL_DUPLEX_STREAMED\n    \
+    \                    response_body_mode: FULL_DUPLEX_STREAMED\n              \
+    \          request_trailer_mode: SEND\n                        response_trailer_mode:\
+    \ SEND\n                      message_timeout: 1000s\n                  - name:\
+    \ envoy.filters.http.router\n                    typed_config:\n             \
+    \         \"@type\": type.googleapis.com/envoy.extensions.filters.http.router.v3.Router\n\
+    \                      suppress_envoy_headers: true\n                http2_protocol_options:\n\
+    \                  max_concurrent_streams: 100\n                  initial_stream_window_size:\
+    \ 65536\n                  initial_connection_window_size: 1048576\n         \
+    \       use_remote_address: true\n                normalize_path: true\n     \
+    \           merge_slashes: true\n                server_header_transformation:\
+    \ PASS_THROUGH\n                common_http_protocol_options:\n              \
+    \    headers_with_underscores_action: REJECT_REQUEST\n                path_with_escaped_slashes_action:\
+    \ UNESCAPE_AND_REDIRECT\n                access_log:\n                  - name:\
+    \ envoy.access_loggers.file\n                    typed_config:\n             \
+    \         \"@type\": type.googleapis.com/envoy.extensions.access_loggers.file.v3.FileAccessLog\n\
+    \                      path: /dev/stdout\n                      log_format:\n\
+    \                        text_format_source:\n                          inline_string:\
+    \ \"{\\\"start_time\\\":\\\"%START_TIME%\\\",\\\"method\\\":\\\"%REQ(:METHOD)%\\\
+    \",...}\\n\"\n  clusters:\n    - name: prometheus_stats\n      type: STATIC\n\
+    \      connect_timeout: 0.250s\n      load_assignment:\n        cluster_name:\
+    \ prometheus_stats\n        endpoints:\n          - lb_endpoints:\n          \
+    \    - endpoint:\n                  address:\n                    socket_address:\n\
+    \                      address: 127.0.0.1\n                      port_value: 19000\n\
+    \    - name: original_destination_cluster\n      type: ORIGINAL_DST\n      connect_timeout:\
+    \ 1000s\n      lb_policy: CLUSTER_PROVIDED\n      circuit_breakers:\n        thresholds:\n\
+    \          - max_connections: 40000\n            max_pending_requests: 40000\n\
+    \            max_requests: 40000\n      original_dst_lb_config:\n        use_http_header:\
+    \ true\n        http_header_name: x-gateway-destination-endpoint\n    - name:\
+    \ ext_proc\n      type: STATIC\n      connect_timeout: 86400s\n      lb_policy:\
+    \ LEAST_REQUEST\n      circuit_breakers:\n        thresholds:\n          - max_connections:\
+    \ 40000\n            max_pending_requests: 40000\n            max_requests: 40000\n\
+    \            max_retries: 1024\n      health_checks:\n        # Active gRPC health\
+    \ checking for the ext_proc cluster.\n        - timeout: 2s\n          interval:\
+    \ 10s\n          unhealthy_threshold: 3\n          healthy_threshold: 2\n    \
+    \      reuse_connection: true\n          grpc_health_check:\n            service_name:\
+    \ \"envoy.service.ext_proc.v3.ExternalProcessor\"\n          tls_options:\n  \
+    \          alpn_protocols: [\"h2\"]\n      transport_socket:\n        name: \"\
+    envoy.transport_sockets.tls\"\n        typed_config:\n          \"@type\": type.googleapis.com/envoy.extensions.transport_sockets.tls.v3.UpstreamTlsContext\n\
+    \          common_tls_context:\n            validation_context:\n      typed_extension_protocol_options:\n\
+    \        envoy.extensions.upstreams.http.v3.HttpProtocolOptions:\n          \"\
+    @type\": type.googleapis.com/envoy.extensions.upstreams.http.v3.HttpProtocolOptions\n\
+    \          explicit_http_config:\n            http2_protocol_options:\n      \
+    \        initial_stream_window_size: 65536\n              initial_connection_window_size:\
+    \ 1048576\n      load_assignment:\n        cluster_name: ext_proc\n        endpoints:\n\
+    \          - locality:\n              region: ext_proc/e2e/0\n            lb_endpoints:\n\
+    \              - endpoint:\n                  address:\n                    socket_address:\n\
+    \                      address: 127.0.0.1\n                      port_value: 9002\n\
+    \                load_balancing_weight: 1\n"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: llmd-epp
+  namespace: inference
+  labels:
+    app.kubernetes.io/name: llmd-epp
+    app.kubernetes.io/version: v0.11.0
+spec:
+  selector:
+    llm-d-router-gateway: llmd-epp
+  ports:
+  - name: grpc-ext-proc
+    protocol: TCP
+    port: 9002
+    appProtocol: kubernetes.io/h2c
+  - name: http-metrics
+    protocol: TCP
+    port: 9090
+  - name: http
+    port: 80
+    protocol: TCP
+    targetPort: 8081
+  type: ClusterIP
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: llmd-epp
+  namespace: inference
+  labels:
+    app.kubernetes.io/name: llmd-epp
+    app.kubernetes.io/version: v0.11.0
+    llm-d.ai/igw-mode: llm-d-router-gateway
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      llm-d-router-gateway: llmd-epp
+  template:
+    metadata:
+      labels:
+        llm-d-router-gateway: llmd-epp
+        llm-d.ai/igw-mode: llm-d-router-gateway
+      annotations:
+        checksum/config: be7f271f732d9630dd2ab42fb2d2d2f470e1f9e642069ed869f9e45cd9470bc4
+    spec:
+      serviceAccountName: llmd-epp
+      terminationGracePeriodSeconds: 130
+      containers:
+      - name: envoy-proxy
+        image: docker.io/envoyproxy/envoy:distroless-v1.37.8@sha256:036ffe3333bd35828fd229d79cb5f2216082bd8a9732cff69db0413d96ae0150
+        imagePullPolicy: IfNotPresent
+        command:
+        - envoy
+        args:
+        - --service-node
+        - envoy-proxy
+        - --log-level
+        - warn
+        - --concurrency
+        - '2'
+        - --drain-strategy
+        - immediate
+        - --drain-time-s
+        - '60'
+        - -c
+        - /etc/envoy/envoy.yaml
+        env:
+        - name: NS_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        ports:
+        - containerPort: 8081
+          name: http-8081
+        - containerPort: 19001
+          name: metrics-19001
+        readinessProbe:
+          failureThreshold: 1
+          httpGet:
+            path: /ready
+            port: 19001
+            scheme: HTTP
+          periodSeconds: 5
+          successThreshold: 1
+          timeoutSeconds: 1
+        resources:
+          limits:
+            cpu: '2'
+            memory: 1Gi
+          requests:
+            cpu: '1'
+            memory: 512Mi
+        volumeMounts:
+        - mountPath: /etc/envoy
+          name: config
+          readOnly: true
+      - name: epp
+        image: ghcr.io/llm-d/llm-d-router-endpoint-picker:v0.11.0@sha256:39257d24552d16d8f215d3de25cc734fd44af3b282b67032db01aff900c610cf
+        imagePullPolicy: IfNotPresent
+        args:
+        - --pool-name
+        - llmd
+        - --pool-namespace
+        - inference
+        - --pool-group
+        - inference.networking.k8s.io
+        - --zap-encoder
+        - json
+        - --config-file
+        - /config/default-plugins.yaml
+        - --grpc-health-port
+        - '9003'
+        - --tracing=false
+        resources:
+          limits:
+            cpu: '2'
+            memory: 2Gi
+          requests:
+            cpu: '1'
+            memory: 1Gi
+        ports:
+        - name: grpc
+          containerPort: 9002
+        - name: grpc-health
+          containerPort: 9003
+        - name: metrics
+          containerPort: 9090
+        livenessProbe:
+          grpc:
+            port: 9003
+            service: inference-extension
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        readinessProbe:
+          grpc:
+            port: 9003
+            service: inference-extension
+          periodSeconds: 2
+        lifecycle:
+          preStop:
+            exec:
+              command:
+              - /bin/sh
+              - -c
+              - sleep 5
+        env:
+        - name: NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        volumeMounts:
+        - name: plugins-config-volume
+          mountPath: /config
+      volumes:
+      - configMap:
+          items:
+          - key: envoy.yaml
+            path: envoy.yaml
+          name: envoy
+        name: config
+      - name: plugins-config-volume
+        configMap:
+          name: llmd-epp
+---
+apiVersion: inference.networking.k8s.io/v1
+kind: InferencePool
+metadata:
+  name: llmd
+  namespace: inference
+  labels:
+    app.kubernetes.io/name: llmd-epp
+    app.kubernetes.io/version: v0.11.0
+spec:
+  targetPorts:
+  - number: 8000
+  appProtocol: http
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: vllm
+  endpointPickerRef:
+    name: llmd-epp
+    port:
+      number: 9002
+    failureMode: FailClose
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: llmd-discovery
+  namespace: inference
+rules:
+- apiGroups:
+  - ''
+  resources:
+  - pods
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - inference.networking.k8s.io
+  resources:
+  - inferencepools
+  verbs:
+  - get
+  - list
+  - watch
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: llmd-discovery
+  namespace: inference
+subjects:
+- kind: ServiceAccount
+  name: llmd-epp
+  namespace: inference
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: llmd-discovery

@@ -4,8 +4,11 @@ A reproducible, GitOps-managed Kubernetes inference platform, built incrementall
 with vLLM, llm-d, and LMCache. **Status as of 2026-10-18: one vLLM replica is
 deployed and serving real inference through a private OpenAI-compatible API.**
 Manual Git config change/revert, storage-preserving stop/start, and a quiescent
-K3s SQLite + token backup are verified under issue #7. Smoke timings are not
-benchmarks; full restore, llm-d and LMCache remain deferred.
+K3s SQLite + token backup are verified under issue #7. The llm-d router is a
+registered manual, non-cascading Argo Application with a committed render that
+passes local render, policy and schema checks, but it has **not** been synced or
+exercised on the cluster. Smoke timings are not benchmarks; full restore, live
+llm-d routing and LMCache remain pending.
 
 ## Current status
 
@@ -24,6 +27,11 @@ benchmarks; full restore, llm-d and LMCache remain deferred.
   [version/evidence record](docs/versions.md#observed-rollback-stopstart-and-sqlite-backup--issue-7-2026-10-18).
 - **Private access only:** ClusterIP Service and loopback port-forwarding; no
   public inference endpoint. Argo sync is manual, not automatic.
+- **Registered, not deployed:** the llm-d router child Application
+  (`apps/llmd/application.yaml` → `apps/llmd/overlays/single-replica`) and the
+  pinned GAIE v1.5.0 `InferencePool` CRD (`bootstrap/llmd/crds.yaml`) are
+  committed. CRD admission, the `llmd` Argo sync and routed SSE against the real
+  backend are **pending live execution**.
 - **Still planned:** full K3s restore rehearsal and token bootstrap/decryption,
   two replicas/GPU sharing, llm-d routing, LMCache, serving-workload reboot
   survival, load tests, and benchmarks. Long-run stability has not been verified.
@@ -52,6 +60,24 @@ smoke test in another terminal:
 ```sh
 python3 scripts/smoke-test.py
 ```
+
+The direct `svc/vllm` port-forward above is unchanged. To exercise the llm-d
+router instead (only after the `llmd` Application is deployed and its CRD is
+admitted), forward the router Service and require the gateway's routed-response
+header with a bounded timeout:
+
+```sh
+kubectl --kubeconfig "$KUBECONFIG_PRIVATE" --context "$CONTEXT" \
+  -n inference port-forward --address 127.0.0.1 svc/llmd-epp 8081:80
+python3 scripts/smoke-test.py --base-url http://127.0.0.1:8081 --require-routed --timeout 30
+```
+
+`--require-routed` fails unless the response carries
+`x-went-into-resp-headers: true`; the printed JSON summary reports `routed` and
+`server`. That header is EPP's response-path signal only — full real-backend
+attribution also correlates the request in the live `vllm` pod
+(`kubectl -n inference logs` / `/metrics`). This routed path has **not** been
+executed against the cluster yet.
 
 ## Reproduce on another host
 
@@ -117,8 +143,10 @@ SQLite/token backup were verified under issue #7; full restore remains pending.
 Git rollback and stop/start, SQLite/token backup, and untested restore preparation.
 
 [llm-d qualification sources](docs/llmd-preparation.md) and the separate
-[CPU-only simulator](docs/llmd-simulator.md) remain unregistered. Source checks
-do not establish pinned EPP/Envoy acceptance or runtime compatibility.
+[CPU-only simulator](docs/llmd-simulator.md) now cover the registered real router
+Application; the simulator candidate remains unregistered. Source checks and the
+committed render do not establish pinned EPP/Envoy acceptance, live CRD admission
+or runtime compatibility.
 
 ## Local checks
 
@@ -136,7 +164,11 @@ git diff --check
 ```
 
 Manifest checks need kubectl and kubeconform; versions and schema limitations
-are documented in the GitOps guide. No configured cluster is contacted.
+are documented in the GitOps guide. No configured cluster is contacted. The
+GAIE `InferencePool` schema is extracted from the committed
+`bootstrap/llmd/crds.yaml`, and `python3 scripts/validate-llmd.py --candidate real`
+also fails if the committed `apps/llmd/base/rendered.yaml` drifts from a fresh
+chart render.
 
 Host installation is manual and intentionally does not automate partitioning,
 flashing, reboots, or firewall changes. Container CUDA computation and Kubernetes

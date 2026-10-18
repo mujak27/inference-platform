@@ -1,7 +1,16 @@
 #!/usr/bin/env python3
-"""Real endpoint test; client arrival times are not server-side token timings."""
+"""Real endpoint test; client arrival times are not server-side token timings.
+
+The total deadline uses Unix SIGALRM (macOS/Linux).
+
+--require-routed only checks EPP's response-path header (x-went-into-resp-headers:
+true); full real-backend attribution also correlates the request in the live vllm
+pod (kubectl -n inference logs / /metrics).
+"""
 import argparse
 import json
+import math
+import signal
 import time
 import urllib.request
 
@@ -24,10 +33,34 @@ def content_chunks(lines):
     raise ValueError("Stream ended without [DONE]")
 
 
+def check_response_headers(headers, require_routed=False):
+    if headers.get_content_type() != "text/event-stream":
+        raise ValueError("Endpoint did not return an SSE stream")
+    routed = (headers.get("x-went-into-resp-headers") or "").strip().lower() == "true"
+    if require_routed and not routed:
+        raise ValueError("Endpoint response was not routed through the gateway "
+                         "(x-went-into-resp-headers: true required)")
+    return {"routed": routed, "server": headers.get("server", "")}
+
+
+def positive_timeout(value):
+    timeout = float(value)
+    if not math.isfinite(timeout) or timeout <= 0:
+        raise argparse.ArgumentTypeError("timeout must be a positive finite number")
+    return timeout
+
+
+def timeout_handler(_signum, _frame):
+    raise TimeoutError("Smoke test exceeded total timeout")
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--base-url", default="http://127.0.0.1:8000")
     parser.add_argument("--model", default="Qwen/Qwen3-1.7B")
+    parser.add_argument("--timeout", type=positive_timeout, default=180)
+    parser.add_argument("--require-routed", action="store_true",
+                        help="fail unless the gateway added x-went-into-resp-headers: true")
     args = parser.parse_args()
     payload = {
         "model": args.model,
@@ -46,15 +79,21 @@ def main():
     first = None
     count = 0
     output = ""
-    with urllib.request.urlopen(request, timeout=180) as response:
-        if response.headers.get_content_type() != "text/event-stream":
-            raise ValueError("Endpoint did not return an SSE stream")
-        for text in content_chunks(response):
-            if first is None:
-                first = time.monotonic() - start
-            count += 1
-            output += text
-            print(text, end="", flush=True)
+    # SIGALRM bounds DNS, headers, and reads (including an endlessly trickling line).
+    previous_handler = signal.signal(signal.SIGALRM, timeout_handler)
+    signal.setitimer(signal.ITIMER_REAL, args.timeout)
+    try:
+        with urllib.request.urlopen(request, timeout=args.timeout) as response:
+            meta = check_response_headers(response.headers, args.require_routed)
+            for text in content_chunks(response):
+                if first is None:
+                    first = time.monotonic() - start
+                count += 1
+                output += text
+                print(text, end="", flush=True)
+    finally:
+        signal.setitimer(signal.ITIMER_REAL, 0)
+        signal.signal(signal.SIGALRM, previous_handler)
     elapsed = time.monotonic() - start
     if not output.strip():
         raise ValueError("No nonempty model output received")
@@ -63,6 +102,8 @@ def main():
         "end_to_end_seconds": elapsed,
         "content_chunks": count,
         "stream_completed": True,
+        "routed": meta["routed"],
+        "server": meta["server"],
     }))
 
 

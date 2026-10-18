@@ -44,6 +44,11 @@ application configuration choice.
 Host and GPU validation → one real vLLM replica → GitOps → two shared-GPU replicas
 → llm-d routing → standardized observability/benchmarks → LMCache → portfolio demo.
 
+By owner decision (2026-10-18, issue #19 MVP addendum), single-backend real-model
+`llm-d` routing is ordered ahead of the two-replica shared-GPU (`#18`) and
+synthetic simulator (`#17`) qualification it depends on, while retaining all
+runtime safety and single-GPU guards.
+
 Begin with Qwen/Qwen3-1.7B as a candidate, FP16, tensor parallelism 1, context
 4096, and concurrency 4. These settings are encoded in the
 [deployed GitOps configuration](gitops.md) with pinned model/runtime references
