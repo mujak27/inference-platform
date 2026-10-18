@@ -64,9 +64,21 @@ def main():
     first = None
     count = 0
     output = ""
+    deadline = start + args.timeout
     with urllib.request.urlopen(request, timeout=args.timeout) as response:
         meta = check_response_headers(response.headers, args.require_routed)
-        for text in content_chunks(response):
+        def deadline_lines():
+            while True:
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    raise TimeoutError("Smoke test exceeded total timeout")
+                response.fp.raw._sock.settimeout(remaining)
+                line = response.readline()
+                if not line:
+                    return
+                yield line
+
+        for text in content_chunks(deadline_lines()):
             if first is None:
                 first = time.monotonic() - start
             count += 1

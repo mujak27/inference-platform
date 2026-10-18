@@ -1,10 +1,14 @@
 import http.client
+import http.server
 import importlib.util
 import json
 from pathlib import Path
 import re
 import subprocess
+import sys
 import tempfile
+import threading
+import time
 import unittest
 
 import yaml
@@ -244,3 +248,31 @@ class StreamTests(unittest.TestCase):
     def test_server_error_fails(self):
         with self.assertRaisesRegex(ValueError, "error"):
             list(load_script("smoke-test").content_chunks([b'data: {"error": "unhealthy"}\n']))
+
+    def test_smoke_timeout_is_total_for_trickling_sse(self):
+        class Handler(http.server.BaseHTTPRequestHandler):
+            def do_POST(self):
+                self.send_response(200)
+                self.send_header("Content-Type", "text/event-stream")
+                self.end_headers()
+                for line in (b'data: {"choices":[{"delta":{"content":"ok"}}]}\n',
+                             b'data: {"choices":[{"delta":{"content":"!"}}]}\n',
+                             b'data: [DONE]\n'):
+                    self.wfile.write(line)
+                    self.wfile.flush()
+                    time.sleep(0.35)
+
+            def log_message(self, *_):
+                pass
+
+        server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+        self.addCleanup(server.server_close)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        self.addCleanup(server.shutdown)
+        started = time.monotonic()
+        result = subprocess.run([sys.executable, str(ROOT / 'scripts/smoke-test.py'),
+                                 '--base-url', f'http://127.0.0.1:{server.server_port}',
+                                 '--timeout', '0.5'], text=True, capture_output=True)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertLess(time.monotonic() - started, 0.8)
