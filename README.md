@@ -113,6 +113,10 @@ Git rollback and stop/start, SQLite/token backup, and untested restore preparati
 [CPU-only simulator](docs/llmd-simulator.md) remain unregistered. Source checks
 do not establish pinned EPP/Envoy acceptance or runtime compatibility.
 
+[llm-d qualification sources](docs/llmd-preparation.md) and the separate
+[CPU-only simulator](docs/llmd-simulator.md) remain unregistered. Source checks
+do not establish pinned EPP/Envoy acceptance or runtime compatibility.
+
 ## Local checks
 
 ```sh
