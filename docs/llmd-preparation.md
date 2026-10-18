@@ -44,9 +44,10 @@ workload cleanup. No additional CRD is installed to satisfy optional watches.
 The coordinating session reported fresh registry/source metadata verification on
 2026-10-18 matching these image/chart pins and amd64 availability. This source
 implementation independently rehashed cached chart bytes only. Signature
-verification, full SBOM/package/advisory scanning and explicit acceptance of any
-new risks remain pending before runtime use. Prior containerd/runc risk acceptance
-is not blanket acceptance of these images.
+verification results, Trivy SARIF contents, full SBOM/package scanning and
+explicit acceptance of any new risks are recorded above and remain open before
+runtime use. Prior containerd/runc risk acceptance is not blanket acceptance of
+these images.
 
 ## Pinned EPP configuration acceptance — no supported dry-run seam
 
@@ -145,6 +146,64 @@ admission/controller behavior are NOT proven by JSON Schema. Required schema
 checks include positive resources and explicit invalid-enum/port/unknown-field
 controls; missing schema/tool errors do not count as successful negative controls.
 
+## Supply-chain verification status, 2026-10-18
+
+Upstream publishes an authoritative verification procedure in
+[verifying-releases.md](https://github.com/llm-d/llm-d-router/blob/a5cbe600ebade00cf3e9885beaf2bfacddeabce1/docs/verifying-releases.md).
+Checksums establish artifact identity only; signature verification is a separate,
+executed gate. `gh attestation verify` is read-only metadata retrieval.
+
+| Artifact | Signature | SBOM | Evidence |
+| --- | --- | --- | --- |
+| EPP `v0.11.0` (`39257d24…`) | **VERIFIED** | SPDX, 116 pkgs | `gh attestation verify oci://ghcr.io/llm-d/llm-d-router-endpoint-picker@sha256:39257d… --repo llm-d/llm-d-router --signer-workflow llm-d/llm-d-router/.github/workflows/ci-build-images.yaml` exits **0**. Discriminating negative control (`ci-release.yaml`) exits **1**. Signer identity is the reusable workflow path, not the caller. |
+| Simulator `v0.11.2` (`32144df7…`) | **NOT AVAILABLE** | **NOT AVAILABLE** | `gh attestation verify` exits **1** against both `ci-release.yaml` and `ci-pr-checks.yaml`; EPP positive control re-run in the same shell exits **0**, so the tool works and the image is unsigned. Build action `.github/actions/docker-build-and-push/action.yml` does plain `docker buildx build --push` — **no cosign, no SLSA generator**. No SPDX layer; only image layers plus an unsigned in-toto document. |
+| Simulator in-toto document | **PRESENT but UNSIGNED** | — | Two `unknown/unknown` index children are `application/vnd.in-toto+json`, `predicateType: https://slsa.dev/provenance/v1`. But no `signatures`/`dsseEnvelope`/`payloadType`; `buildDefinition`, `builder` and `buildType` are null/empty; covers linux/amd64 only; BuildKit's own `buildkit_completeness.resolvedDependencies: false`. This is BuildKit auto-provenance, **not** an SLSA-generated release attestation. It has **zero cryptographic verification value** — do not cite it as supply-chain assurance. |
+| Helm chart | **NOT COVERED** | **NOT COVERED** | Upstream explicitly excludes `ghcr.io/llm-d/charts/` from signature and SBOM coverage. Archive checksum is identity, not provenance. |
+| Envoy `distroless-v1.37.8` (`036ffe33…`) | **NOT AVAILABLE (VERIFIED)** | **NOT AVAILABLE** | Separate upstream project; no llm-d procedure applies. See below. |
+
+### Envoy verification and advisories
+
+- **No container signature, provenance or SBOM.** The OCI referrers endpoint for
+  the exact digest returns `{"manifests":[]}` — the authoritative location for
+  cosign signatures, SLSA/in-toto provenance and SPDX/CycloneDX referrers. This
+  negative is corroborated by build-path source: `_publish_release_container.yml`
+  calls `envoyproxy/toolshed/actions/oci/collector`, whose `action.yml` contains
+  zero cosign/slsa/sigstore/syft keywords and only runs `buildah manifest
+  create/add/push`. The sole `signing.key` in the pipeline is a Debian APT key,
+  not container signing. No documented container verification procedure exists;
+  `SECURITY-INSIGHTS.yml` declares only Dependabot SCA and CodeQL SAST.
+- **Envoy does GPG-sign release archives** (`checksums.txt.asc`, key in
+  `releases.asc`, "Envoy maintainers"), with source and linux binaries. That
+  covers release archives, **not** the container image this candidate uses.
+- **Advisory disposition: 0 advisories leave 1.37.8 vulnerable.** Of 132 total
+  GHSA advisories, 7 explicitly name 1.37. Evaluating `vulnerable_version_range`
+  against 1.37.8 *including* `patched_versions` leaves none open; every 1.37.x fix
+  point in the database is 1.37.1, 1.37.3, 1.37.5, 1.37.6 or 1.37.8. The two
+  newest advisories (2026-10-06, before 1.37.8 shipped at 14:43:43Z) both list
+  **1.37.8 as the patched version**. Naive range parsing is misleading here:
+  scopes such as `>=1.37,<1.39` are advisory coverage, not unpatched status.
+- **Known advisory-database lag:** 1.37.9 shipped 2026-10-12 with no advisory
+  explaining it; the newest GHSA entry is 2026-10-06. Treat as an open question,
+  not a clean bill of health.
+- **EOL confirmed:** `RELEASES.md` lists 1.37 supported until **2027-01-13**,
+  supporting 1.37.8 as the smallest justified evaluation override. 1.33.2 remains
+  blocked (EOL 2026-01-14); 1.36 EOL was 2026-10-14.
+
+Simulator mitigating evidence: its release workflow runs a Trivy scan
+(`trivy-action@v0.36.0`, `format: sarif`, `severity: HIGH,CRITICAL`, `exit-code: 1`)
+and uploads SARIF via `codeql-action/upload-sarif`. A HIGH/CRITICAL finding fails
+the build, so the successful release run implies a clean scan **at build time
+only**. SARIF contents were not readable (403); treat as unverified. Releases
+carry zero downloadable assets. Advisories: `llm-d/llm-d-router` **0**,
+`llm-d/llm-d` **0**, `llm-d/llm-d-inference-sim` **0** — all verified. Empty
+component advisories do not mean clean dependencies.
+
+EPP SBOM disposition is not a vulnerability scan. Envoy and vLLM advisory
+volumes (132 and 104) require per-advisory disposition against the exact pins,
+not blanket acceptance. Prior containerd/runc risk acceptance is not blanket
+acceptance of these images. Signature verification and SBOM findings above do not
+constitute explicit risk acceptance, which remains an owner decision.
+
 ## Compatibility/evidence matrix
 
 | Gate | Evidence class / status |
@@ -159,7 +218,7 @@ controls; missing schema/tool errors do not count as successful negative control
 | Target Linux amd64 interoperability | PENDING, including TLS/ext_proc/health behavior |
 | vLLM 0.31.0 vs released llm-d vLLM 0.30.0 | Preserve proven 0.31.0; compatibility pending, no silent downgrade (older baseline has fixed-vulnerability concerns) |
 | Metrics parser, cache signals, real SSE | PENDING; existing direct-vLLM serving does not prove routed compatibility |
-| Provenance signatures, SBOM/advisory disposition | PENDING; new risks need explicit resolution/acceptance before runtime use |
+| Provenance signatures, SBOM/advisory disposition | EPP signature **VERIFIED** with discriminating negative control; simulator and Envoy signatures **NOT AVAILABLE** (build paths contain no signing step); Envoy advisory disposition leaves 0 open against 1.37.8 with a known DB lag; chart excluded from upstream coverage. Full detail above. Explicit risk acceptance remains an owner decision before runtime use |
 
 Do not close #16 from source checks alone. #7 owns host recovery operations;
 #15 owns numeric experiment limits; #17 remains blocked. Real profile includes
