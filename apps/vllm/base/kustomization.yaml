@@ -15,6 +15,6 @@ configMapGenerator:
       - DTYPE=float16
       - TENSOR_PARALLEL_SIZE=1
       - MAX_MODEL_LEN=4096
-      - MAX_NUM_SEQS=4
+      - MAX_NUM_SEQS=3
       # Single-replica budget, not the later shared-GPU budget.
       - GPU_MEMORY_UTILIZATION=0.80
