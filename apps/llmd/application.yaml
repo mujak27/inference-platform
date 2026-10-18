@@ -1,0 +1,16 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: llmd
+  namespace: argocd
+  # No cascade finalizer and no auto-sync: deployment is an explicit gate.
+spec:
+  project: inference
+  source:
+    repoURL: https://github.com/mujak27/inference-platform.git
+    targetRevision: main
+    path: apps/llmd/overlays/single-replica
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: inference
+  syncPolicy: {}

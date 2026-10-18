@@ -24,3 +24,11 @@ spec:
       kind: ConfigMap
     - group: ""
       kind: PersistentVolumeClaim
+    - group: ""
+      kind: ServiceAccount
+    - group: rbac.authorization.k8s.io
+      kind: Role
+    - group: rbac.authorization.k8s.io
+      kind: RoleBinding
+    - group: inference.networking.k8s.io
+      kind: InferencePool

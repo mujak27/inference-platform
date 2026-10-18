@@ -1,3 +1,4 @@
+import http.client
 import importlib.util
 import json
 from pathlib import Path
@@ -36,12 +37,47 @@ class GitOpsTests(unittest.TestCase):
     def test_every_application_is_manual_and_non_cascading(self):
         root = yaml.safe_load((ROOT / "bootstrap/root-app.yaml").read_text())
         apps = [root] + [item for item in self.control if item["kind"] == "Application"]
-        self.assertEqual(len(apps), 2)
+        self.assertEqual({app["metadata"]["name"] for app in apps}, {"root", "vllm", "llmd"})
         for app in apps:
             self.assertNotIn("automated", app["spec"]["syncPolicy"])
             self.assertFalse(app["metadata"].get("finalizers"))
             self.assertEqual(app["spec"]["source"]["targetRevision"], "main")
             self.assertTrue((ROOT / app["spec"]["source"]["path"]).is_dir())
+
+    def test_llmd_single_replica_overlay_and_project_whitelist(self):
+        llmd_workload = render("apps/llmd/overlays/single-replica")
+        deployment = next(item for item in llmd_workload if item["kind"] == "Deployment")
+        self.assertEqual(deployment["metadata"]["name"], "llmd-epp")
+        self.assertEqual(deployment["spec"]["replicas"], 1)
+        service = next(item for item in llmd_workload if item["kind"] == "Service")
+        self.assertEqual(service["metadata"]["name"], "llmd-epp")
+        self.assertEqual(service["spec"]["type"], "ClusterIP")
+        self.assertIn({"name": "http", "port": 80, "protocol": "TCP", "targetPort": 8081},
+                      service["spec"]["ports"])
+        pool = next(item for item in llmd_workload if item["kind"] == "InferencePool")
+        self.assertEqual(pool["metadata"]["name"], "llmd")
+        self.assertEqual(pool["spec"]["selector"]["matchLabels"], {"app.kubernetes.io/name": "vllm"})
+        self.assertEqual(pool["spec"]["targetPorts"], [{"number": 8000}])
+        self.assertEqual(pool["spec"]["endpointPickerRef"]["failureMode"], "FailClose")
+        role = next(item for item in llmd_workload if item["kind"] == "Role")
+        self.assertEqual(role["metadata"]["name"], "llmd-discovery")
+        # Across both rendered overlays the pool selector must match exactly the
+        # single real vllm Deployment (replicas 1) and no other Deployment.
+        selector = pool["spec"]["selector"]["matchLabels"]
+        deployments = [item for item in self.workload + llmd_workload if item["kind"] == "Deployment"]
+        matched = [item for item in deployments
+                   if selector.items() <= item["spec"]["template"]["metadata"]["labels"].items()]
+        self.assertEqual([item["metadata"]["name"] for item in matched], ["vllm"])
+        self.assertEqual(matched[0]["spec"]["replicas"], 1)
+        self.assertEqual(len(deployments), 2)
+        project = yaml.safe_load((ROOT / "infra/inference-project.yaml").read_text())
+        self.assertEqual(project["spec"]["destinations"],
+                         [{"server": "https://kubernetes.default.svc", "namespace": "inference"}])
+        self.assertEqual(project["spec"]["clusterResourceWhitelist"], [{"group": "", "kind": "Namespace"}])
+        whitelist = {(item["group"], item["kind"]) for item in project["spec"]["namespaceResourceWhitelist"]}
+        self.assertTrue({("", "ServiceAccount"), ("rbac.authorization.k8s.io", "Role"),
+                         ("rbac.authorization.k8s.io", "RoleBinding"),
+                         ("inference.networking.k8s.io", "InferencePool")} <= whitelist)
 
     def test_pins_and_configuration_references(self):
         deployment = self.resource("Deployment")
@@ -172,6 +208,28 @@ class GitOpsTests(unittest.TestCase):
 
 
 class StreamTests(unittest.TestCase):
+    def response_headers(self, content_type="text/event-stream", **headers):
+        message = http.client.HTTPMessage()
+        message["Content-Type"] = content_type
+        for name, value in headers.items():
+            message[name.replace("_", "-")] = value
+        return message
+
+    def test_response_headers_require_sse_and_optionally_routed_proxy(self):
+        check = load_script("smoke-test").check_response_headers
+        with self.assertRaisesRegex(ValueError, "SSE"):
+            check(self.response_headers(content_type="application/json"))
+        self.assertEqual(check(self.response_headers(server="uvicorn")),
+                         {"routed": False, "server": "uvicorn"})
+        for headers in ({"server": "uvicorn"},
+                        {"server": "envoy", "x_went_into_resp_headers": "false"}):
+            with self.subTest(headers=headers):
+                with self.assertRaisesRegex(ValueError, "routed"):
+                    check(self.response_headers(**headers), require_routed=True)
+        self.assertEqual(check(self.response_headers(server="uvicorn", x_went_into_resp_headers="true"),
+                               require_routed=True),
+                         {"routed": True, "server": "uvicorn"})
+
     def test_incremental_content_and_done(self):
         event = lambda text: b"data: " + json.dumps({"choices": [{"delta": {"content": text}}]}).encode() + b"\n"
         stream = load_script("smoke-test").content_chunks([event("Hello"), event(" GPU"), b"data: [DONE]\n"])

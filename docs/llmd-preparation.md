@@ -1,9 +1,54 @@
 # llm-d qualification — source checks, not runtime adoption
 
 Issue [#16](https://github.com/mujak27/inference-platform/issues/16), fixed source
-base `8eb55b437994afee49e79335617f602e9cc47d44`. No Application, CRD installation,
-cluster operation, GPU sharing or model/image download is authorized here.
+base `8eb55b437994afee49e79335617f602e9cc47d44`. Issue #19 then registered the
+manual, non-cascading `llmd` Application and committed the pinned GAIE v1.5.0 CRD
+asset. **No CRD installation, cluster operation or Argo sync is authorized here.**
 The single-engine vLLM 0.31.0 image, model and resource settings remain unchanged.
+
+## Registered repository configuration (issue #19)
+
+- `apps/llmd/application.yaml` — manual, non-cascading child Application pinned to
+  `main`, path `apps/llmd/overlays/single-replica`, project `inference`.
+- `apps/llmd/base/rendered.yaml` — the committed chart render. It is produced from
+  the pinned chart plus `apps/llmd/candidate/values.yaml` and the reviewed minimal
+  `apps/llmd/candidate/discovery-rbac.yaml`; it is not hand-edited.
+- `apps/llmd/overlays/single-replica/` — only pins `replicas: 1` for `llmd-epp`.
+- `bootstrap/llmd/crds.yaml` — the checksum-verified GAIE v1.5.0 asset
+  (`sha256:cd7cc631…`), installed separately by an operator with
+  `kubectl apply --server-side -f bootstrap/llmd/crds.yaml`. It is CRD
+  administration, not a child Application resource.
+- `infra/inference-project.yaml` — the `inference` AppProject now also whitelists
+  `ServiceAccount`, `Role`, `RoleBinding` and `InferencePool` in the `inference`
+  namespace; `clusterResourceWhitelist` stays `Namespace` only.
+
+The committed `bootstrap/llmd/crds.yaml` is the checksum-pinned upstream GAIE
+`v1.5.0` release asset `v1-manifests.yaml` (SHA-256 `cd7cc631…`). It serves the
+GA `inference.networking.k8s.io/v1` `InferencePool` schema while still carrying
+upstream's unbumped `inference.networking.k8s.io/bundle-version: v1.5.0-rc.2`
+annotation; the bytes are preserved unmodified to match the upstream release
+checksum. The router uses the chart's `default-plugins.yaml` — the default plugin
+profile verified in the #16 EPP harness — and running it against a single backend
+makes no load-aware or cache-aware routing claim.
+
+## Evidence boundary — static checks only
+
+Local render, policy and schema checks pass: the committed render is byte-compared
+against a fresh chart render, the `InferencePool` is validated against the schema
+extracted from `bootstrap/llmd/crds.yaml`, and the simulator candidate stays
+unregistered. **Live cluster CRD admission, the `llmd` Argo sync, `ext_proc`
+interoperability and routed SSE against the real backend are PENDING live
+execution and have not been run.** Bounded routed smoke command (after an approved
+deploy):
+
+```sh
+kubectl -n inference port-forward --address 127.0.0.1 svc/llmd-epp 8081:80
+python3 scripts/smoke-test.py --base-url http://127.0.0.1:8081 --require-routed --timeout 30
+```
+
+`--require-routed` fails unless the response carries `x-went-into-resp-headers: true`.
+The direct backend bypass (`svc/vllm` port `8000`, plain `scripts/smoke-test.py`)
+is unchanged.
 
 ## Provenance and deliberate integration
 
@@ -149,8 +194,9 @@ First obtain separate approval for any tool installation/artifact retrieval. CI
 declares pinned acquisitions; no CI run or executable/chart download was performed
 by this source-only implementation. With approved tools and source inputs:
 
-1. Put the approved chart archive at `.local/llmd/llm-d-router-standalone-v0.11.0.tgz`
-   and the GAIE asset at `.local/llmd/crds.yaml`. Checksums are checked before use.
+1. The chart archive is acquired separately at
+   `.local/llmd/llm-d-router-standalone-v0.11.0.tgz`; the GAIE asset is committed
+   at `bootstrap/llmd/crds.yaml`. Checksums are checked before use.
 2. Run the following; no render command fetches artifacts or contacts a cluster:
 
 ```sh
@@ -168,9 +214,12 @@ to read an approved cached archive without copying it. Final outputs are replace
 only after all rendering succeeds. Missing tools/chart/render/schema inputs fail;
 tests do not skip. Validators rerender into a temporary directory and compare
 bytes with supplied output, so old or edited YAML cannot satisfy the required
-gate. They use `--rendered PATH --chart PATH --crds PATH`; `KUBECONFORM` selects
-an explicitly approved tool. Built-in schema lookup may retrieve schema DATA from
-the repository's commit-pinned remote; no downloaded Python converter is executed.
+gate; for the real candidate the committed `apps/llmd/base/rendered.yaml` is
+compared with that fresh render too. They use `--rendered PATH --chart PATH
+--crds PATH` (`--crds` defaults to the committed `bootstrap/llmd/crds.yaml`);
+`KUBECONFORM` selects an explicitly approved tool. Built-in schema lookup may
+retrieve schema DATA from the repository's commit-pinned remote; no downloaded
+Python converter is executed.
 
 `--policy-only` is an explicitly partial, supplied-YAML inspection seam used by
 mutation tests. It does NOT check freshness/schemas and is never the required CI

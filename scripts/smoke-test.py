@@ -1,5 +1,10 @@
 #!/usr/bin/env python3
-"""Real endpoint test; client arrival times are not server-side token timings."""
+"""Real endpoint test; client arrival times are not server-side token timings.
+
+--require-routed only checks EPP's response-path header (x-went-into-resp-headers:
+true); full real-backend attribution also correlates the request in the live vllm
+pod (kubectl -n inference logs / /metrics).
+"""
 import argparse
 import json
 import time
@@ -24,10 +29,23 @@ def content_chunks(lines):
     raise ValueError("Stream ended without [DONE]")
 
 
+def check_response_headers(headers, require_routed=False):
+    if headers.get_content_type() != "text/event-stream":
+        raise ValueError("Endpoint did not return an SSE stream")
+    routed = (headers.get("x-went-into-resp-headers") or "").strip().lower() == "true"
+    if require_routed and not routed:
+        raise ValueError("Endpoint response was not routed through the gateway "
+                         "(x-went-into-resp-headers: true required)")
+    return {"routed": routed, "server": headers.get("server", "")}
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--base-url", default="http://127.0.0.1:8000")
     parser.add_argument("--model", default="Qwen/Qwen3-1.7B")
+    parser.add_argument("--timeout", type=float, default=180)
+    parser.add_argument("--require-routed", action="store_true",
+                        help="fail unless the gateway added x-went-into-resp-headers: true")
     args = parser.parse_args()
     payload = {
         "model": args.model,
@@ -46,9 +64,8 @@ def main():
     first = None
     count = 0
     output = ""
-    with urllib.request.urlopen(request, timeout=180) as response:
-        if response.headers.get_content_type() != "text/event-stream":
-            raise ValueError("Endpoint did not return an SSE stream")
+    with urllib.request.urlopen(request, timeout=args.timeout) as response:
+        meta = check_response_headers(response.headers, args.require_routed)
         for text in content_chunks(response):
             if first is None:
                 first = time.monotonic() - start
@@ -63,6 +80,8 @@ def main():
         "end_to_end_seconds": elapsed,
         "content_chunks": count,
         "stream_completed": True,
+        "routed": meta["routed"],
+        "server": meta["server"],
     }))
 
 

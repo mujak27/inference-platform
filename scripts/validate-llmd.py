@@ -183,8 +183,15 @@ def policy(resources, candidate):
     binding, = [r for r in resources if r['kind'] == 'RoleBinding']
     require(binding['roleRef'] == {'apiGroup': 'rbac.authorization.k8s.io', 'kind': 'Role', 'name': roles[0]['metadata']['name']} and
             binding['subjects'] == [{'kind': 'ServiceAccount', 'name': router_name, 'namespace': namespace}], 'discovery RBAC identity mismatch')
-    for path in ('apps/kustomization.yaml', 'infra/kustomization.yaml'):
-        require('llmd' not in (ROOT / path).read_text(), 'candidate must remain unregistered')
+    registration((ROOT / 'apps/kustomization.yaml').read_text(), (ROOT / 'infra/kustomization.yaml').read_text())
+
+
+def registration(apps_text, infra_text):
+    require('llmd-sim' not in apps_text and 'simulator' not in apps_text and
+            'llmd-sim' not in infra_text and 'simulator' not in infra_text,
+            'simulator candidate must remain unregistered')
+    require('llmd/application.yaml' in apps_text,
+            'real router application must be registered in apps/kustomization.yaml')
 
 
 def strict_schema(value):
@@ -249,7 +256,7 @@ def main():
     parser.add_argument('--candidate', choices=('real', 'sim'), required=True)
     parser.add_argument('--rendered', type=Path)
     parser.add_argument('--chart', type=Path, default=ROOT / '.local/llmd/llm-d-router-standalone-v0.11.0.tgz')
-    parser.add_argument('--crds', type=Path, default=ROOT / '.local/llmd/crds.yaml')
+    parser.add_argument('--crds', type=Path, default=ROOT / 'bootstrap/llmd/crds.yaml')
     parser.add_argument('--policy-only', action='store_true', help='inspect supplied YAML only; no freshness/schema proof (not the CI gate)')
     args = parser.parse_args()
     rendered = args.rendered or ROOT / ('.local/llmd/rendered.yaml' if args.candidate == 'real' else '.local/llmd-sim/rendered.yaml')
@@ -265,6 +272,10 @@ def main():
                                 '--candidate', args.candidate, '--chart', str(args.chart),
                                 '--output', str(fresh)], check=True, timeout=150)
                 require(fresh.read_bytes() == rendered.read_bytes(), 'stale or modified rendered input; rerender from current sources')
+                if args.candidate == 'real':
+                    committed = ROOT / 'apps/llmd/base/rendered.yaml'
+                    require(committed.is_file() and committed.read_bytes() == fresh.read_bytes(),
+                            'committed apps/llmd/base/rendered.yaml is stale; rerender from current sources')
             schemas(resources, args.candidate, args.crds)
             print('SOURCE CHECKS: current render, source policy and JSON schemas passed')
         else:

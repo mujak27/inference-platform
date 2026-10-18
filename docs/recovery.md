@@ -78,6 +78,23 @@ PYTHONDONTWRITEBYTECODE=1 python3 scripts/smoke-test.py --base-url http://127.0.
 Require exit 0, SSE MIME, nonempty incremental content before completion, no error
 and terminal `[DONE]`. Record client timings as smoke observations only.
 
+That direct backend bypass is unchanged. For the llm-d router, forward its Service
+instead and require the gateway's routed-response header with a bounded timeout
+(only after an approved CRD install and `llmd` sync):
+
+```sh
+kubectl --kubeconfig "$KUBECONFIG_PRIVATE" --context "$CONTEXT" \
+  -n inference port-forward --address 127.0.0.1 svc/llmd-epp 8081:80
+PYTHONDONTWRITEBYTECODE=1 python3 scripts/smoke-test.py \
+  --base-url http://127.0.0.1:8081 --require-routed --timeout 30
+```
+
+`--require-routed` fails unless the response carries `x-went-into-resp-headers: true`;
+the JSON summary reports `routed` and `server`. That header is EPP's response-path
+signal only; full real-backend attribution also correlates the request in the live
+`vllm` pod (`kubectl -n inference logs` / `/metrics`). A direct-backend success is
+not routed evidence, and this path has **not** been executed live yet.
+
 ## Fresh baseline and evidence for every transition
 
 Before mutation, inspect SSH/firewall, driver, API/node/device-plugin health,
@@ -171,6 +188,27 @@ deletion, namespace removal, administrator error and disk/node loss can destroy
 data. No retention test by deleting real storage, cascade deletion, uninstall or
 routine Namespace/PVC/PV deletion. Root deletion does not stop inference. Inventory
 old hashed ConfigMaps left by no-prune sync; do not clean them up as rollback.
+
+## llm-d router stop and rollback — NOT yet executed
+
+The router Application (`apps/llmd/application.yaml`) is registered but has never
+been synced, so there is no observed live state to roll back yet. When an approved
+deployment happens, use the same manual, non-cascading discipline:
+
+1. Stop by committing `count: 1 -> 0` for `llmd-epp` in
+   `apps/llmd/overlays/single-replica/kustomization.yaml`, or by `git revert`ing
+   the router commit, then manually syncing the **llmd child only** with
+   `prune=false`. Never use `kubectl scale`, pod deletion or cascading deletion.
+2. Require the router Deployment to report zero desired/current/ready replicas, no
+   ready `llmd-epp` endpoints, and an unchanged `vllm` child, `vllm-models` PVC and
+   its bound PV with their `Prune=false,Delete=false` protections.
+3. Rolling back to `count: 1` restores the router without touching model storage.
+   `bootstrap/llmd/crds.yaml` is operator-managed CRD administration and is never
+   part of workload rollback; only an explicitly approved cleanup removes it.
+4. The direct `svc/vllm` serving path stays available throughout, so router
+   rollback never leaves inference stopped.
+
+CRD admission, the `llmd` sync and routed SSE remain **PENDING live execution**.
 
 ## SQLite and paired-token backup — observed and validated; restore UNTESTED
 

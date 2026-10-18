@@ -1,5 +1,6 @@
 """Source-only contracts; fixtures/fake tools are not candidate-runtime evidence."""
 from pathlib import Path
+import importlib.util
 import os
 import sys
 import subprocess
@@ -10,6 +11,13 @@ import yaml
 
 
 ROOT = Path(__file__).resolve().parents[1]
+
+
+def load_script(name):
+    spec = importlib.util.spec_from_file_location(name, ROOT / 'scripts' / f'{name}.py')
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
 class RenderCommandTests(unittest.TestCase):
@@ -191,3 +199,27 @@ class ValidatorCommandTests(unittest.TestCase):
                 result = self.validate('sim', path)
                 self.assertNotEqual(result.returncode, 0, result.stdout)
                 self.assertIn('validation failed:', result.stderr)
+
+    def test_simulator_registration_is_rejected_and_real_registration_required(self):
+        validator = load_script('validate-llmd')
+        for text in ('simulator', 'llmd-sim'):
+            with self.subTest(registration=text):
+                with self.assertRaisesRegex(ValueError, 'must remain unregistered'):
+                    validator.registration('llmd/application.yaml\n' + text, '')
+                with self.assertRaisesRegex(ValueError, 'must remain unregistered'):
+                    validator.registration('llmd/application.yaml', text)
+        with self.assertRaisesRegex(ValueError, 'must be registered'):
+            validator.registration('vllm/application.yaml', '')
+        validator.registration('vllm/application.yaml\nllmd/application.yaml', '')
+
+    def test_committed_real_render_is_fresh_and_rejects_drift(self):
+        committed = ROOT / 'apps/llmd/base/rendered.yaml'
+        self.assertTrue(committed.is_file())
+        result = self.validate('real', committed, policy_only=False)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn('SOURCE CHECKS', result.stdout)
+        drifted = Path(self.directory.name) / 'committed-drift.yaml'
+        drifted.write_bytes(committed.read_bytes() + b'\n# drift\n')
+        result = self.validate('real', drifted, policy_only=False)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('stale or modified rendered input', result.stderr)
