@@ -1,4 +1,14 @@
-# llm-d qualification — source checks, not runtime adoption
+# llm-d real-model MVP — bounded runtime observed; broader qualification deferred
+
+On 2026-10-18, after separate explicit owner approval, the real candidate was
+deployed and exercised through one existing vLLM backend. The observed CRD
+admission/Established state, manual Argo reconciliation, router readiness and
+routed SSE are recorded in the [version evidence](versions.md#real-llm-d-mvp-execution--issues-1519-2026-10-18).
+This narrow MVP does not qualify all candidate behaviors: cache-metrics parser
+and signals, certificate behavior, failure/cancellation, second-engine operation,
+load, HA and performance remain deferred. The original source-only work and its
+historical evidence below remain unchanged; that preparation itself did not
+authorize the later operations.
 
 Issue [#16](https://github.com/mujak27/inference-platform/issues/16), fixed source
 base `8eb55b437994afee49e79335617f602e9cc47d44`. Issue #19 then registered the
@@ -31,15 +41,16 @@ checksum. The router uses the chart's `default-plugins.yaml` — the default plu
 profile verified in the #16 EPP harness — and running it against a single backend
 makes no load-aware or cache-aware routing claim.
 
-## Evidence boundary — static checks only
+## Source evidence and current runtime boundary
 
 Local render, policy and schema checks pass: the committed render is byte-compared
 against a fresh chart render, the `InferencePool` is validated against the schema
 extracted from `bootstrap/llmd/crds.yaml`, and the simulator candidate stays
-unregistered. **Live cluster CRD admission, the `llmd` Argo sync, `ext_proc`
-interoperability and routed SSE against the real backend are PENDING live
-execution and have not been run.** Bounded routed smoke command (after an approved
-deploy):
+unregistered. Live CRD admission, manual `llmd` sync and a single routed SSE
+against the sole real backend have since been observed (see version record).
+That smoke proves the routed response path for one request only; it is not a
+general `ext_proc` interoperability or fault-semantics qualification. Bounded
+routed smoke command:
 
 ```sh
 kubectl -n inference port-forward --address 127.0.0.1 svc/llmd-epp 8081:80
@@ -310,10 +321,10 @@ waive the remaining target `linux/amd64` and live runtime gates.
 | Earlier Envoy bootstrap acceptance | Superseded by the fresh 2026-10-18 isolated `linux/arm64` `--mode validate` run below; still not target `linux/amd64` proof |
 | Fresh full candidate schema suite | Passed locally with approved checksum-verified kubeconform 0.8.0: real 8 valid, simulator 10 valid, negative controls passed; CI green on PR #29; suite re-verified on merged base |
 | Actual mounted Envoy/EPP config acceptance | **VALIDATED locally (`darwin/arm64` EPP + `linux/arm64` Envoy); target `linux/amd64` and runtime gates PENDING.** Exact rendered EPP ConfigMap bytes (`real` 488 B, 17 plugins; `sim` 285 B, 13 plugins) passed upstream `a5cbe60` phase-one/phase-two registry, parameter, profile and stability validation under network-denied `sandbox-exec` on `darwin/arm64` (3 negative controls rejected). Exact rendered Envoy bootstrap bytes (`bd7d0590…`, 8,309 B, `--service-node envoy-proxy` and `synthetic-llmd-sim-proxy`) passed isolated `--mode validate` on pinned `envoy:distroless-v1.37.8@sha256:036ffe33…` (`linux/arm64`, 4 negative controls rejected; `envoy_grpc.cluster_name` resolution is a documented `--mode validate` blind spot covered statically by `validate-llmd.py`). Target `linux/amd64` execution, published EPP container execution and runtime gates remain **PENDING** |
-| K3s 1.35.9 / GAIE 1.5.0 admission and discovery | PENDING separately approved API/controller verification; Helm 1.35 capabilities are not admission |
-| Target Linux amd64 interoperability | PENDING, including TLS/ext_proc/health behavior |
+| K3s 1.35.9 / GAIE 1.5.0 admission and discovery | Observed server-side dry-run, live apply, Established CRD and API discovery; controller behavior beyond the single routed MVP is not qualified |
+| Target Linux amd64 interoperability | One live routed request to the real vLLM backend passed; certificate behavior, broader ext_proc, failure/cancellation and health semantics remain pending |
 | vLLM 0.31.0 vs released llm-d vLLM 0.30.0 | Preserve proven 0.31.0; compatibility pending, no silent downgrade (older baseline has fixed-vulnerability concerns) |
-| Metrics parser, cache signals, real SSE | PENDING; existing direct-vLLM serving does not prove routed compatibility |
+| Metrics parser, cache signals, real SSE | One routed SSE and backend attribution observed; cache-metrics parser/signals remain pending |
 | Provenance signatures, SBOM/advisory disposition | **OWNER-ACCEPTED (2026-10-18)** for the exact pinned unsigned Simulator v0.11.2, Envoy distroless-v1.37.8 and standalone chart v0.11.0 artifacts; EPP v0.11.0 signature **VERIFIED** with discriminating negative control; Envoy advisory disposition leaves 0 open against 1.37.8 (known 1.37.9 advisory-DB lag included in acceptance). Scoped to exact digests/checksums; does not waive runtime gates |
 
 Do not close #16 from source checks alone. #7 owns host recovery operations;

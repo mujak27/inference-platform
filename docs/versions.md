@@ -1,5 +1,50 @@
 # Version and evidence record
 
+## Real llm-d MVP execution — issues #15/#19, 2026-10-18
+
+Following explicit owner approval, the previously prepared llm-d candidate was
+deployed on the existing single-node K3s host. The source integrated from PR #34
+(`cd06d372e06b10d170b00375a5772d7b3398b55f`) was the reviewed target. Private,
+owner-only raw evidence is retained outside Git at
+`<workspace-docs>/inference-platform-private/llmd-mvp-issue15-19-20261018/`.
+
+- DHCP address drift made the API endpoint stale. Under the approved repair,
+  K3s `advertise-address`/`node-ip` and the pod-to-API UFW destination were
+  aligned to the current address, then K3s was restarted normally. API readiness,
+  node Ready, and pod API TCP access recovered; the stale Kubernetes Service
+  endpoint disappeared. No interface or DHCP configuration was changed and no
+  host trust check was bypassed. This is a manual recovery, not stable addressing.
+- GAIE v1.5.0 `InferencePool` CRD server-side dry-run and live apply passed;
+  `Established` and API discovery of `inference.networking.k8s.io/v1` were
+  observed. The root Application and `llmd` child were manually reconciled at
+  `cd06d372e06b10d170b00375a5772d7b3398b55f`, with pruning disabled. Root and
+  child reported Synced/Healthy after reconciliation. No automatic sync was
+  enabled.
+- The `llmd-epp` router reached **2/2 ready**; the existing vLLM backend remained
+  **1/1 ready**. Existing model image digest remains
+  `sha256:c1c9f6fd5c109ba7f0546a59f5b2f15fb87f64c77782e90a27b648b42a8e67c3`;
+  router/EPP and Envoy remain pinned to the documented v0.11.0 and
+  `distroless-v1.37.8` digests. No second backend, model weights, GPU driver,
+  or GPU-sharing configuration was added. Namespace/PVC protections remain
+  `Prune=false,Delete=false`; the same PVC/PV remained Bound/Retain.
+- Actual routed SSE returned HTTP 200, `text/event-stream`, routed-response
+  header, incremental text and terminal `[DONE]`: 64 chunks, first content
+  **0.0509 s**, total **0.4207 s**. A separate direct request returned 64 chunks,
+  first content **0.0232 s**, total **0.3548 s**. These are client-side smoke
+  timings, not benchmarks. Fresh attribution at 12:47:39 UTC showed one routed
+  request ID/model Qwen/Qwen3-1.7B and routed header; the matching real-backend
+  success counter advanced **5→6** with no direct request interleaved. This
+  attributes one successful request to the sole real backend; no matching
+  request-ID log line is claimed.
+- Restart reconciliation confirmed the existing vLLM UID and retained volume
+  identity unchanged. No sharing, new weights, or public exposure was introduced.
+  Metrics-server remained not Ready and its old node address was unchanged; metrics
+  availability is not qualified by this run.
+
+This records a bounded real-model MVP observation, not broad llm-d qualification.
+Cache-metrics parser/signal correctness, certificate behavior, failure/cancellation
+semantics, a second engine/backend, load, HA, and performance remain deferred.
+
 ## llm-d issue #16 — source-only qualification slice, 2026-10-18
 
 Fixed base `8eb55b437994afee49e79335617f602e9cc47d44`; reviewed preparation from
