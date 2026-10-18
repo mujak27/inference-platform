@@ -15,7 +15,8 @@ and schema execution; no broader candidate-runtime authorization was inferred.
   explicitly narrowed to namespaced Pod and GA InferencePool get/list/watch;
   simulator remains Pod-only. Proven vLLM 0.31.0 is unchanged.
 - `LLMD_CHART=<approved-cached-chart> python3 -B -m unittest discover -s tests -v`:
-  **35 tests passed, no skips** (23 unchanged baseline + 12 public CLI tests).
+  **35 tests passed, no skips** (23 original baseline + 12 public CLI tests; the
+  suite grew to 36 total after the #27 stop/start replica-bounds test, run later).
   Actual red→green checks covered absent inputs, real rendering/RBAC, supplied
   policy checks, stale output, required missing schema, selector overlap,
   scheduler-disable overrides and model-download arguments. Additional negative
@@ -60,7 +61,8 @@ Source: fresh `origin/main` base `c4ef0f9`, task branch `gpu-storage-issue-5`;
 configuration is `bootstrap/nvidia-device-plugin/values.yaml` and its accompanying
 runbook. Configuration/evidence snapshot committed after approved execution at
 `f1da27dca926080274c03d280c24abe0b53efc2b`; this records the executed configuration,
-not a GitOps-managed installation. PR review/merge remains pending.
+not a GitOps-managed installation. That PR (#10,
+`7d0e9da4effa5735b48cafd31ab68560e48fb022`) was subsequently reviewed and merged.
 
 - Installed chart/app **0.20.1**, chart SHA-256
   `b705142f03ac17906bfcface9319e2f7b9a570d2af7f04f23252723ce2c0bb8e`.
@@ -123,7 +125,8 @@ and pod-replacement checks. Executed **2026-10-18 01:32:34–01:32:56 WIB /
 2026-10-17 18:32:34–18:32:56 UTC** (individual operation timestamps in evidence).
 Configuration: `bootstrap/storage/local-path-retain.yaml`,
 `apps/vllm/base/namespace.yaml`, and `apps/vllm/base/model-cache.yaml`; same task
-branch/base and configuration snapshot commit as Stage A; PR review/merge pending.
+branch/base and configuration snapshot commit as Stage A; that PR (#10,
+`7d0e9da4effa5735b48cafd31ab68560e48fb022`) was subsequently reviewed and merged.
 
 - Existing healthy **rancher/local-path-provisioner v0.0.37** reused; no second
   provisioner. Dedicated nondefault **local-path-retain** has **Retain** and
@@ -245,8 +248,8 @@ Additional private evidence in the same directory: `reboot-bypass-command.json`,
 `reboot-{runtimeclass,pvc,pv,namespace}.json`, `reboot-pod-{final,logs,delete}.json`,
 `reboot-pods-after.json`, `reboot-plugin-logs.json`, `post-reboot-final.txt`, and
 `post-reboot-direct-port-probes.json`. Hardware allocation, storage replacement
-and reboot gates passed; configuration snapshot is committed above, with PR
-review/merge still pending.
+and reboot gates passed; configuration snapshot is committed above, with PR #10
+(`7d0e9da4effa5735b48cafd31ab68560e48fb022`) subsequently reviewed and merged.
 
 ## Observed host baseline — issue #3
 
@@ -543,10 +546,12 @@ client observations, not benchmarks.
 
 ### Fresh baseline — 2026-10-18T05:28–05:33Z
 
-- Read-only single observer. Started from integrated commit
-  `8eb55b437994afee49e79335617f602e9cc47d44`; the operational tree
-  (`apps`, `bootstrap`, `infra`, `scripts/smoke-test.py`) is identical to the
-  child-synced `e2b9b8f4c0757df0b37ba8f66982bcd405d66afa`. No repository edit,
+- Read-only single observer. Started from the issue #6 integrated baseline
+  `8eb55b437994afee49e79335617f602e9cc47d44` (PR #14) and `main`'s tip at
+  observation `2fcb799f34d555bafd34e7103c5b7e7f22202004` (PR #27, recovery
+  runbook + replica bounds test); both share an identical operational tree
+  (`apps`, `bootstrap`, `infra`, `scripts/smoke-test.py`) with the child-synced
+  `e2b9b8f4c0757df0b37ba8f66982bcd405d66afa`. No repository edit,
   sync, backup, service interruption or cluster/host mutation.
 - Pod `vllm-57fb69c78b-r78kw` Ready (1/1, 0 restarts); child Application
   Synced/Healthy; the root cosmetic `OutOfSync` difference was unchanged.
@@ -603,8 +608,8 @@ client observations, not benchmarks.
 - At zero: Deployment generation **5** (`observedGeneration` 5; desired/current/
   ready/available replicas 0); **0 pods** in `inference`; no ready Service
   endpoints; GPU memory fell **19,084 → 120 MiB**, releasing the ~18.5 GiB model
-  allocation while leaving desktop VRAM. Namespace (`a204aa2e…`), PVC (`cd714b12…`)
-  and PV (`896e4e17…`) UIDs were unchanged, Bound **20Gi**, PV **Retain**, the
+  allocation while leaving desktop VRAM. Namespace, PVC, and PV UIDs unchanged
+  from baseline (retained in private evidence), Bound **20Gi**, PV **Retain**, the
   `Prune=false,Delete=false` annotations intact, and the model cache byte-identical.
 - Start commit `b96d69a901ef845ac6a22e305a64e15bf7ac787a` (normal `git revert` of
   `7660b44`, restoring `count: 1`). One manual child sync (`prune=false`) Succeeded
@@ -625,11 +630,11 @@ client observations, not benchmarks.
   and allowlisted service/config/node-password prerequisites; verified
   byte-for-byte equality against the stopped sources. Started `k3s.service` back to
   `active` at `09:18:16Z` — **30 s total service interruption**.
-- Packaged into `/var/backups/k3s/issue7-20261018T091745Z/backup.tar`
-  (13,680,640 bytes, SHA-256
-  `95bbe80b9ccb9bc1bbfdb1bbae194ca93fb0cba6a4cdf5712b738dd57da70c56`; directories
-  0700, files 0600), transferred over strict-host-key SSH to FileVault-encrypted
-  off-host private storage (0700/0600), verified a matching SHA-256 and a safe tar
+- Packaged into a new root-only 0700 host backup directory under
+  `/var/backups/k3s` (archive 13,680,640 bytes, mode 0600; SHA-256 manifest
+  verified on host and retained in private evidence), transferred over
+  strict-host-key SSH to FileVault-encrypted off-host private storage
+  (0700/0600), verified a matching SHA-256 and a safe tar
   member allowlist, and validated a disposable writable extraction with Python
   3.12.15 / SQLite 3.53.1 (`PRAGMA integrity_check` = `ok`,
   `PRAGMA foreign_key_check` = `[]`, nonempty `kine` table; disposable copy removed).
@@ -640,6 +645,20 @@ client observations, not benchmarks.
   source-to-stage byte checks, archive/transfer SHA-256 and disposable-copy SQLite
   integrity checks passed; post-start serving checks passed. Full K3s restore and
   token bootstrap/decryption have not been tested.”**
+
+### Static validation rerun at closeout — 2026-10-18
+
+The following static checks were rerun when closing issue #7:
+
+- `bash -n` passed on all scripts.
+- `LLMD_CHART=<approved-cached-chart> python3 -B -m unittest discover -s tests -v`:
+  **36 passed, 0 skipped** (24 baseline/recovery tests including
+  `test_rendered_stop_start_replica_bounds`, plus 12 llm-d qualification tests).
+- `bash scripts/validate-manifests.sh` with kubeconform v0.8.0: **74 resources —
+  71 valid, 0 invalid/errors, 3 upstream CRDs skipped**.
+- `git diff --check` passed.
+- The operational/evidence commits `53f8313`, `7660b44`, `b96d69a` and `695a533`
+  were pushed directly to `main` under explicit owner authorization.
 
 ## Other proposed or unverified baseline items
 

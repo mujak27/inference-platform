@@ -29,8 +29,9 @@ The owner selected 26.04 LTS instead of the original 24.04 proposal; see
 As checked on 2026-10-17, NVIDIA Container Toolkit's platform table
 lists both Ubuntu 24.04 and 26.04. The selected driver/runtime/Kubernetes/vLLM
 combination passed the separate CUDA, allocation, storage and streaming checks
-recorded in [versions.md](versions.md). Rollback and recovery remain unverified.
-No OS release alone establishes compatibility.
+recorded in [versions.md](versions.md). Manual Git rollback, storage-preserving
+stop/start, and quiescent SQLite/token backup are verified under issue #7 (full
+restore rehearsal untested). No OS release alone establishes compatibility.
 
 The desktop compositor and GUI applications can consume GPU memory. Record idle
 VRAM/processes before inference tests, avoid unrelated GPU workloads, and allow

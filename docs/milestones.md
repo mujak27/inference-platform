@@ -137,7 +137,8 @@ idle with the model loaded; and the owner-approved pod-replacement proof showed
 byte-identical model cache (no re-download), unchanged PVC/PV identity with
 Retain, and a passing smoke test on the replacement pod.
 
-Checks not executed for GitOps/serving: formal rollback/reconciliation proof,
+Checks not executed for GitOps/serving: formal rollback/reconciliation proof
+(subsequently verified under issue #7 below),
 concurrency or load testing, benchmark measurements, and reboot survival of the
 serving workload. K3s bootstrap, standalone CUDA computation, Kubernetes GPU
 allocation, pod-replacement storage and reboot survival are verified under
@@ -177,9 +178,9 @@ through Git. Full detail and limitations are in
 - A quiescent K3s stop (`09:17:46Z`) allowed a root copy of `server/db/` (3 files,
   13,648,472 logical bytes) plus the paired `server/token` and allowlisted
   prerequisites, byte-checked against the stopped sources; K3s restarted at
-  `09:18:16Z` (30 s interruption). The archive (SHA-256
-  `95bbe80b…`) was transferred to encrypted off-host storage and a disposable
-  SQLite copy passed `PRAGMA integrity_check` = `ok` and an empty
+  `09:18:16Z` (30 s interruption). The archive was transferred to encrypted
+  off-host storage (archive and transfer SHA-256 verified privately) and a
+  disposable SQLite copy passed `PRAGMA integrity_check` = `ok` and an empty
   `foreign_key_check`. Post-start cluster health and real SSE passed.
 - Honest boundary: **full K3s restore and token bootstrap/decryption remain
   UNTESTED.** No restore, upgrade, storage deletion or performance calibration was

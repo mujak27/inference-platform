@@ -3,9 +3,10 @@
 This is a first-install guide, not a recovery script. Private SSH, the host/runtime
 baseline and first streaming inference have been observed under issues #3–#6;
 see [versions.md](versions.md) for evidence and limitations. Do not blindly rerun
-package upgrades or installation commands on the working host. Rollback, stop/start
-and backup/recovery acceptance remain pending under issue #7 and require separate
-operational approval.
+package upgrades or installation commands on the working host. The issue #7
+rollback, stop/start, and quiescent SQLite/token backup were verified on
+2026-10-18 (see [versions.md](versions.md)); full restore rehearsal remains
+untested and future host operations remain approval-gated.
 
 Run host commands **on the installed Ubuntu machine**, not on the management Mac.
 The commands below are first-install examples, not an execution log.

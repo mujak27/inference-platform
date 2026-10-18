@@ -20,6 +20,15 @@ restore and token bootstrap/decryption remain UNTESTED.** Earlier pod-replacemen
 cache reuse is not the issue #7 stop/start exercise; smoke timings are not
 benchmarks. Each future execution still requires its own approval.
 
+Before issue #7's exercises, the last recorded child sync was
+`e2b9b8f4c0757df0b37ba8f66982bcd405d66afa`, while the issue #6 integrated baseline
+`8eb55b437994afee49e79335617f602e9cc47d44` (PR #14) and the issue #7 runbook
+baseline `2fcb799f34d555bafd34e7103c5b7e7f22202004` (PR #27) shared the identical
+operational tree. After those exercises (`90db167` → `53f8313`, `7660b44` →
+`b96d69a`) the live child `vllm` Application is synced at
+`b96d69a901ef845ac6a22e305a64e15bf7ac787a`, with the same baseline operational
+settings (`MAX_NUM_SEQS=4`, `replicas=1`).
+
 ## Approval and private access
 
 Before acting, obtain owner approval for the exact merged source/sync SHAs,
