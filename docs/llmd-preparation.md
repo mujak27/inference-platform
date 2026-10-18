@@ -48,6 +48,58 @@ verification, full SBOM/package/advisory scanning and explicit acceptance of any
 new risks remain pending before runtime use. Prior containerd/runc risk acceptance
 is not blanket acceptance of these images.
 
+## Pinned EPP configuration acceptance — no supported dry-run seam
+
+Upstream EPP v0.11.0 (commit `a5cbe600ebade00cf3e9885beaf2bfacddeabce1`) exposes
+no `--validate`, `--dry-run` or equivalent CLI mode. `Options.AddFlags` accepts
+configuration inputs; `Runner.Run` parses, then requires Kubernetes
+configuration or starts file-discovery serving — file discovery is not a dry
+run, and a missing-kubeconfig failure happens before phase-two plugin
+validation.
+
+- `loader.LoadRawConfig` performs strict structural parsing only; it does not
+  instantiate plugins. Unknown plugin types survive this phase.
+- `loader.InstantiateAndConfigure` performs genuine registry/factory
+  validation: registered types, duplicate names, strict parameter decoding,
+  system defaults and reference checks. It uses unexported production
+  registration and does not perform all production phase-two work.
+- Compile-only builds (`go build`, `go test -c`) prove compilation, not
+  configuration acceptance. Upstream unit targets build a builder image;
+  “hermetic” integration tests acquire envtest binaries. Neither is a
+  validated acceptance of our mounted files.
+
+Any acceptance of the mounted EPP ConfigMap requires a new, separately
+approved harness using upstream internals with the exact pinned toolchain
+(`go.mod` requires Go 1.26.6), network disabled, no credentials/model files,
+bounded resources, and negative controls. Production phase two auto-creates
+approximate-prefix (cleanup goroutine) and tokenizer (local estimation with
+zero config; other configurations start renderer warmup) producers, so factory
+side effects require bounded input and network isolation. YAML equality with a
+fixture is not this evidence.
+
+## Envoy validation seam — proposed, not executed
+
+Envoy `--mode validate` performs filesystem-only validation with no network
+traffic and no hot restart. A proposed isolated invocation is recorded here for
+approval, not execution:
+
+```sh
+docker run --rm --pull=never --platform=linux/<arch> \
+  --network=none --read-only --cap-drop=ALL --security-opt=no-new-privileges \
+  --user=65532:65532 --cpus=1 --memory=512m --pids-limit=64 \
+  --mount "type=bind,src=${BOOTSTRAP},dst=/etc/envoy/envoy.yaml,readonly" \
+  --entrypoint /usr/local/bin/envoy \
+  docker.io/envoyproxy/envoy:distroless-v1.37.8@sha256:036ffe3333bd35828fd229d79cb5f2216082bd8a9732cff69db0413d96ae0150 \
+  --mode validate -c /etc/envoy/envoy.yaml \
+  --service-node <rendered service-node> --concurrency 1 --log-level warn
+```
+
+Validate the exact rendered bytes. Do not use `envsubst`, fabricated addresses
+or `--config-yaml` to make validation pass; the pinned preset renders host/TLS
+values through Helm and invokes Envoy directly. `linux/arm64` execution is not
+target amd64 proof. Validation does not prove DNS, TLS handshakes, discovery,
+ext_proc interoperability or SSE.
+
 ## Reproduce source checks
 
 First obtain separate approval for any tool installation/artifact retrieval. CI
@@ -101,8 +153,8 @@ controls; missing schema/tool errors do not count as successful negative control
 | Cached chart checksum/source inspection | Fresh local pass; not publisher signature verification |
 | Fresh local render and public source-policy controls | Source-only checks; see execution results in coordinating handoff |
 | Earlier Envoy bootstrap acceptance | Historical native Linux arm64 Docker checks in prior preparation; not rerun, not amd64 proof |
-| Fresh full candidate schema suite | Passed locally with approved checksum-verified kubeconform 0.8.0: real 8 valid, simulator 10 valid, negative controls passed; CI not run remotely |
-| Actual mounted Envoy/EPP config acceptance | PENDING pinned-binary execution approval and supported EPP config-loader seam |
+| Fresh full candidate schema suite | Passed locally with approved checksum-verified kubeconform 0.8.0: real 8 valid, simulator 10 valid, negative controls passed; CI green on PR #29; suite re-verified on merged base |
+| Actual mounted Envoy/EPP config acceptance | PENDING. No upstream dry-run seam exists; `--mode validate` invocation and EPP harness recorded above require separately approved execution scope |
 | K3s 1.35.9 / GAIE 1.5.0 admission and discovery | PENDING separately approved API/controller verification; Helm 1.35 capabilities are not admission |
 | Target Linux amd64 interoperability | PENDING, including TLS/ext_proc/health behavior |
 | vLLM 0.31.0 vs released llm-d vLLM 0.30.0 | Preserve proven 0.31.0; compatibility pending, no silent downgrade (older baseline has fixed-vulnerability concerns) |
