@@ -132,6 +132,46 @@ Private client → loopback port-forward → llm-d gateway/scheduler → vLLM
 
 Future work: multiple vLLM replicas/GPU sharing and optional LMCache CPU tier.
 
+### Request sequence through llm-d
+
+There is no public inference endpoint: both Services are `ClusterIP` and the
+only access path is a loopback `kubectl port-forward`. The routed path below
+exists only after the GAIE v1.5.0 `InferencePool` CRD is admitted and the manual
+`llmd` child Application is synced; it was observed against the sole real backend
+on 2026-10-18. The direct `svc/vllm` bypass remains independently available.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant Client as Private client
+    participant PF as kubectl port-forward<br/>127.0.0.1:8081
+    participant Svc as Service llmd-epp<br/>ClusterIP port 80
+    participant Envoy as Envoy sidecar<br/>llmd-epp pod port 8081
+    participant EPP as EPP scheduler<br/>llmd-epp pod port 9002
+    participant VLLM as vLLM Pod<br/>Qwen3-1.7B port 8000
+
+    Note over Client,PF: No Ingress, Gateway API Gateway, or LoadBalancer exists.<br/>Access is a loopback port-forward over private admin access.
+    Note over EPP: Watches InferencePool llmd<br/>selector app.kubernetes.io/name=vllm, targetPort 8000<br/>using namespaced Pod and InferencePool read RBAC.
+
+    Client->>PF: POST /v1/chat/completions (stream=true)
+    PF->>Svc: TCP 127.0.0.1:8081 to Service port 80
+    Svc->>Envoy: forward to targetPort 8081
+    Envoy->>EPP: ext_proc request headers and streamed body over gRPC 9002
+    EPP->>EPP: score ready Pods with the default profile<br/>queue, KV-cache utilization, prefix cache
+    EPP-->>Envoy: header mutation x-gateway-destination-endpoint = selected Pod IP port 8000
+    Envoy->>VLLM: POST /v1/chat/completions via original_dst Pod endpoint
+    VLLM-->>Envoy: SSE chunks (text/event-stream)
+    Envoy->>EPP: ext_proc response headers and streamed body
+    EPP-->>Envoy: response header mutation x-went-into-resp-headers = true
+    Envoy-->>PF: streamed SSE response
+    PF-->>Client: SSE data chunks and [DONE]
+```
+
+Envoy streams request and response bodies through EPP's `ext_proc` in
+`FULL_DUPLEX_STREAMED` mode; the EPP response header is a response-path signal,
+not proof by itself that a particular backend served the request. The direct
+bypass is client → `svc/vllm` port 8000 → vLLM Pod, with no Envoy or EPP hop.
+
 The initial validation target is a single RTX 3090 (24 GB VRAM) with 128 GB host
 RAM. Two replicas on it demonstrate routing and lifecycle behavior, **not**
 independent GPU scaling or GPU fault isolation. Other hosts need their own
